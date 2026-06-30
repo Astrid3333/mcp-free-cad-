@@ -1,0 +1,389 @@
+# CAM Tool Controller Management Handler for FreeCAD MCP
+
+import FreeCAD
+import time
+from typing import Dict, Any
+from .base import BaseHandler
+
+
+class CAMToolControllersHandler(BaseHandler):
+    """Handler for CAM tool controller operations (CRUD).
+
+    Tool controllers link tools to specific jobs with operating parameters
+    like spindle speed, feed rate, etc.
+    """
+
+    _ALLOWED_OPERATIONS = frozenset({
+        "add_tool_controller", "list_tool_controllers", "get_tool_controller",
+        "update_tool_controller", "remove_tool_controller",
+    })
+
+    def add_tool_controller(self, args: Dict[str, Any]) -> str:
+        """Add a tool controller to a CAM job.
+
+        Args:
+            job_name: Name of the CAM job
+            tool_name: Name of the tool bit to use
+            controller_name: Name for the tool controller (optional)
+            spindle_speed: Spindle speed in RPM (optional, default: 10000)
+            feed_rate: Horizontal feed rate in mm/min (optional, default: 1000)
+            vertical_feed_rate: Vertical (plunge) feed rate in mm/min (optional)
+            tool_number: Tool number for G-code (optional, default: 1)
+
+        Returns:
+            Success/error message
+        """
+        start_time = time.time()
+        try:
+            # FreeCAD 1.0+ uses new module structure
+            try:
+                from Path.Tool.Controller import Create as CreateController
+            except ImportError:
+                error = Exception("Path.Tool module not available. Requires FreeCAD 1.0+")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            doc = self.get_document()
+            if not doc:
+                error = Exception("No active document")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job_name = args.get('job_name', '')
+            tool_name = args.get('tool_name', '')
+
+            if not job_name:
+                error = Exception("job_name parameter required")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+            if not tool_name:
+                error = Exception("tool_name parameter required")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Get the job
+            job = self.get_object(job_name, doc)
+            if not job:
+                error = Exception(f"Job '{job_name}' not found")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Get the tool bit
+            tool = self.get_object(tool_name, doc)
+            if not tool:
+                error = Exception(f"Tool '{tool_name}' not found")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # In FreeCAD 1.2+, tool bits are Part::FeaturePython with ShapeID attribute
+            if not hasattr(tool, 'ShapeID'):
+                error = Exception(f"Object '{tool_name}' is not a tool bit (no ShapeID attribute)")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Create tool controller
+            controller_name = args.get('controller_name', f"TC_{tool_name}")
+            controller = CreateController(controller_name)
+
+            # Link to tool bit
+            controller.Tool = tool
+
+            # Set parameters
+            spindle_speed = args.get('spindle_speed', 10000)
+            feed_rate = args.get('feed_rate', 1000)           # mm/min from user
+            vertical_feed_rate = args.get('vertical_feed_rate', feed_rate / 3)
+            tool_number = args.get('tool_number', 1)
+
+            # FC 1.2 stores feed rates in mm/s internally
+            controller.SpindleSpeed = float(spindle_speed)
+            controller.HorizFeed = feed_rate / 60.0
+            controller.VertFeed = vertical_feed_rate / 60.0
+            controller.ToolNumber = tool_number
+
+            # Add to job's tool controllers
+            if hasattr(job, 'Tools'):
+                job.Tools.Group += [controller]
+            else:
+                error = Exception(f"Job '{job_name}' does not support tool controllers")
+                return self.log_and_return("add_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            self.recompute(doc)
+            result = f"Added tool controller '{controller.Label}' to job '{job_name}' (Tool: {tool_name}, Speed: {spindle_speed} RPM, Feed: {feed_rate} mm/min)"
+            return self.log_and_return("add_tool_controller", args, result=result, duration=time.time() - start_time)
+
+        except Exception as e:
+            return self.log_and_return("add_tool_controller", args, error=e, duration=time.time() - start_time)
+
+    def list_tool_controllers(self, args: Dict[str, Any]) -> str:
+        """List all tool controllers in a CAM job.
+
+        Args:
+            job_name: Name of the CAM job
+
+        Returns:
+            Formatted list of tool controllers with details
+        """
+        start_time = time.time()
+        try:
+            doc = self.get_document()
+            if not doc:
+                error = Exception("No active document")
+                return self.log_and_return("list_tool_controllers", args, error=error, duration=time.time() - start_time)
+
+            job_name = args.get('job_name', '')
+            if not job_name:
+                error = Exception("job_name parameter required")
+                return self.log_and_return("list_tool_controllers", args, error=error, duration=time.time() - start_time)
+
+            job = self.get_object(job_name, doc)
+            if not job:
+                error = Exception(f"Job '{job_name}' not found")
+                return self.log_and_return("list_tool_controllers", args, error=error, duration=time.time() - start_time)
+
+            # Get tool controllers
+            if not hasattr(job, 'Tools'):
+                error = Exception(f"Job '{job_name}' does not have tool controllers")
+                return self.log_and_return("list_tool_controllers", args, error=error, duration=time.time() - start_time)
+
+            controllers = job.Tools.Group if hasattr(job.Tools, 'Group') else []
+
+            if not controllers:
+                result = f"No tool controllers found in job '{job_name}'. Use add_tool_controller to add one."
+                return self.log_and_return("list_tool_controllers", args, result=result, duration=time.time() - start_time)
+
+            result = f"Tool controllers in job '{job_name}' ({len(controllers)}):\n"
+            for i, tc in enumerate(controllers, 1):
+                tool_name = tc.Tool.Label if hasattr(tc, 'Tool') and tc.Tool else 'None'
+                speed = tc.SpindleSpeed if hasattr(tc, 'SpindleSpeed') else 'N/A'
+                # FC 1.2 stores feed as a velocity Quantity (base unit mm/s); convert
+                # to mm/min exactly rather than string-splitting the formatted value.
+                feed_val = self.feed_to_mm_min(tc.HorizFeed) if hasattr(tc, 'HorizFeed') else None
+                feed = f"{feed_val:.0f}" if feed_val is not None else 'N/A'
+                tool_num = tc.ToolNumber if hasattr(tc, 'ToolNumber') else 'N/A'
+
+                result += f"  {i}. {tc.Label} (T{tool_num})\n"
+                result += f"     Tool: {tool_name}\n"
+                result += f"     Speed: {speed} RPM, Feed: {feed} mm/min\n"
+
+            return self.log_and_return("list_tool_controllers", args, result=result, duration=time.time() - start_time)
+
+        except Exception as e:
+            return self.log_and_return("list_tool_controllers", args, error=e, duration=time.time() - start_time)
+
+    def get_tool_controller(self, args: Dict[str, Any]) -> str:
+        """Get detailed information about a specific tool controller.
+
+        Args:
+            job_name: Name of the CAM job
+            controller_name: Name of the tool controller
+
+        Returns:
+            Detailed tool controller information
+        """
+        start_time = time.time()
+        try:
+            doc = self.get_document()
+            if not doc:
+                error = Exception("No active document")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job_name = args.get('job_name', '')
+            controller_name = args.get('controller_name', '')
+
+            if not job_name:
+                error = Exception("job_name parameter required")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+            if not controller_name:
+                error = Exception("controller_name parameter required")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job = self.get_object(job_name, doc)
+            if not job:
+                error = Exception(f"Job '{job_name}' not found")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            controller = self.get_object(controller_name, doc)
+            if not controller:
+                error = Exception(f"Tool controller '{controller_name}' not found")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            if not hasattr(controller, 'SpindleSpeed'):
+                error = Exception(f"Object '{controller_name}' is not a tool controller")
+                return self.log_and_return("get_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Collect details
+            result = f"Tool Controller: {controller.Label}\n"
+
+            if hasattr(controller, 'Tool') and controller.Tool:
+                result += f"  Tool: {controller.Tool.Label}\n"
+                if hasattr(controller.Tool, 'Diameter'):
+                    result += f"  Tool Diameter: {controller.Tool.Diameter}\n"
+            else:
+                result += f"  Tool: None\n"
+
+            if hasattr(controller, 'ToolNumber'):
+                result += f"  Tool Number (T): {controller.ToolNumber}\n"
+            if hasattr(controller, 'SpindleSpeed'):
+                result += f"  Spindle Speed: {controller.SpindleSpeed} RPM\n"
+            if hasattr(controller, 'SpindleDir'):
+                result += f"  Spindle Direction: {controller.SpindleDir}\n"
+            # Feed/rapid properties are velocity Quantities in mm/s; convert to
+            # mm/min exactly so the value matches the displayed unit label.
+            for prop, label in (("HorizFeed", "Horizontal Feed"),
+                                ("VertFeed", "Vertical Feed"),
+                                ("HorizRapid", "Horizontal Rapid"),
+                                ("VertRapid", "Vertical Rapid")):
+                if hasattr(controller, prop):
+                    v = self.feed_to_mm_min(getattr(controller, prop))
+                    result += (f"  {label}: {v:.0f} mm/min\n" if v is not None
+                               else f"  {label}: N/A\n")
+
+            return self.log_and_return("get_tool_controller", args, result=result, duration=time.time() - start_time)
+
+        except Exception as e:
+            return self.log_and_return("get_tool_controller", args, error=e, duration=time.time() - start_time)
+
+    def update_tool_controller(self, args: Dict[str, Any]) -> str:
+        """Update parameters of an existing tool controller.
+
+        Args:
+            job_name: Name of the CAM job
+            controller_name: Name of the tool controller
+            spindle_speed: New spindle speed in RPM (optional)
+            feed_rate: New horizontal feed rate in mm/min (optional)
+            vertical_feed_rate: New vertical feed rate in mm/min (optional)
+            tool_number: New tool number (optional)
+
+        Returns:
+            Success/error message
+        """
+        start_time = time.time()
+        try:
+            doc = self.get_document()
+            if not doc:
+                error = Exception("No active document")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job_name = args.get('job_name', '')
+            controller_name = args.get('controller_name', '')
+
+            if not job_name:
+                error = Exception("job_name parameter required")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+            if not controller_name:
+                error = Exception("controller_name parameter required")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            controller = self.get_object(controller_name, doc)
+            if not controller:
+                error = Exception(f"Tool controller '{controller_name}' not found")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            if not hasattr(controller, 'SpindleSpeed'):
+                error = Exception(f"Object '{controller_name}' is not a tool controller")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Update parameters if provided
+            updates = []
+
+            if 'spindle_speed' in args:
+                controller.SpindleSpeed = float(args['spindle_speed'])  # coerce, like the add path
+                updates.append(f"spindle_speed: {args['spindle_speed']} RPM")
+
+            if 'feed_rate' in args:
+                controller.HorizFeed = args['feed_rate'] / 60.0  # mm/min -> mm/s
+                updates.append(f"feed_rate: {args['feed_rate']} mm/min")
+
+            if 'vertical_feed_rate' in args:
+                controller.VertFeed = args['vertical_feed_rate'] / 60.0  # mm/min -> mm/s
+                updates.append(f"vertical_feed_rate: {args['vertical_feed_rate']} mm/min")
+
+            if 'tool_number' in args:
+                controller.ToolNumber = args['tool_number']
+                updates.append(f"tool_number: T{args['tool_number']}")
+
+            # These are readable via get_tool_controller but previously had no
+            # write path, so they were frozen after creation. Rapids are velocity
+            # Quantities (mm/s base), same mm/min->mm/s convention as feeds.
+            if 'spindle_dir' in args:
+                controller.SpindleDir = args['spindle_dir']
+                updates.append(f"spindle_dir: {args['spindle_dir']}")
+
+            if 'horiz_rapid' in args:
+                controller.HorizRapid = args['horiz_rapid'] / 60.0  # mm/min -> mm/s
+                updates.append(f"horiz_rapid: {args['horiz_rapid']} mm/min")
+
+            if 'vert_rapid' in args:
+                controller.VertRapid = args['vert_rapid'] / 60.0  # mm/min -> mm/s
+                updates.append(f"vert_rapid: {args['vert_rapid']} mm/min")
+
+            if not updates:
+                error = Exception("No parameters to update. Provide spindle_speed, feed_rate, vertical_feed_rate, tool_number, spindle_dir, horiz_rapid, or vert_rapid.")
+                return self.log_and_return("update_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            self.recompute(doc)
+            result = f"Updated tool controller '{controller_name}': {', '.join(updates)}"
+            return self.log_and_return("update_tool_controller", args, result=result, duration=time.time() - start_time)
+
+        except Exception as e:
+            return self.log_and_return("update_tool_controller", args, error=e, duration=time.time() - start_time)
+
+    def remove_tool_controller(self, args: Dict[str, Any]) -> str:
+        """Remove a tool controller from a CAM job.
+
+        Args:
+            job_name: Name of the CAM job
+            controller_name: Name of the tool controller to remove
+
+        Returns:
+            Success/error message
+        """
+        start_time = time.time()
+        try:
+            doc = self.get_document()
+            if not doc:
+                error = Exception("No active document")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job_name = args.get('job_name', '')
+            controller_name = args.get('controller_name', '')
+
+            if not job_name:
+                error = Exception("job_name parameter required")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+            if not controller_name:
+                error = Exception("controller_name parameter required")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            job = self.get_object(job_name, doc)
+            if not job:
+                error = Exception(f"Job '{job_name}' not found")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            controller = self.get_object(controller_name, doc)
+            if not controller:
+                error = Exception(f"Tool controller '{controller_name}' not found")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            if not hasattr(controller, 'SpindleSpeed'):
+                error = Exception(f"Object '{controller_name}' is not a tool controller")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Check if tool controller is in use by any operations
+            in_use = []
+            if hasattr(job, 'Operations'):
+                for op in job.Operations.Group:
+                    if hasattr(op, 'ToolController') and op.ToolController == controller:
+                        in_use.append(op.Label)
+
+            if in_use:
+                error = Exception(f"Cannot remove tool controller '{controller_name}' - it is used by operation(s): {', '.join(in_use)}")
+                return self.log_and_return("remove_tool_controller", args, error=error, duration=time.time() - start_time)
+
+            # Remove from job's tool controllers
+            if hasattr(job, 'Tools'):
+                controllers = list(job.Tools.Group)
+                if controller in controllers:
+                    controllers.remove(controller)
+                    job.Tools.Group = controllers
+
+            # Delete the controller object
+            doc.removeObject(controller.Name)
+            result = f"Removed tool controller '{controller_name}' from job '{job_name}'"
+            return self.log_and_return("remove_tool_controller", args, result=result, duration=time.time() - start_time)
+
+        except Exception as e:
+            return self.log_and_return("remove_tool_controller", args, error=e, duration=time.time() - start_time)
