@@ -1623,7 +1623,7 @@ class FreeCADSocketServer:
             self.verification_ops = VerificationOpsHandler(self, _log_operation, _capture_state)
             self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
             self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
-        self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
+            self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
             self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
             self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
             self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
