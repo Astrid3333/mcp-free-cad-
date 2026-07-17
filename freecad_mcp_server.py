@@ -2290,6 +2290,217 @@ async def main():
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
                 ),
+
+                types.Tool(
+                    name="compliant_operations",
+                    description=(
+                        "Living-hinge / compliant-joint generation for prosthetic mechanisms. "
+                        "recommend_hinge_thickness: material+cycle-derated thickness estimate. "
+                        "create_living_hinge: cut a reduced-section hinge across a solid. "
+                        "create_flexure_array: a row of hinges (segmented compliant finger)."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "recommend_hinge_thickness", "create_living_hinge", "create_flexure_array"]},
+                            "material": {"type": "string", "enum": ["petg", "tpu", "pla"], "default": "tpu"},
+                            "flex_angle_deg": {"type": "number", "default": 90.0},
+                            "hinge_length_mm": {"type": "number", "default": 10.0},
+                            "expected_cycles": {"type": "integer", "default": 10000},
+                            "shape": {"type": "string", "description": "Object to cut the hinge into"},
+                            "position_mm": {"type": "array", "items": {"type": "number"}},
+                            "axis": {"type": "string", "enum": ["x", "y", "z"], "default": "z"},
+                            "thickness_mm": {"type": "number", "default": 0.8},
+                            "width_mm": {"type": "number", "default": 10.0},
+                            "name": {"type": "string"},
+                            "start_mm": {"type": "array", "items": {"type": "number"}},
+                            "end_mm": {"type": "array", "items": {"type": "number"}},
+                            "count": {"type": "integer", "default": 3},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
+
+                types.Tool(
+                    name="tendon_routing_operations",
+                    description=(
+                        "Geometric tendon-path planning and clearance checks for tendon-driven "
+                        "prosthetic joints. compute_anchor_points: offset anchors from a joint chain. "
+                        "check_tendon_curvature: verify bend radius against cable minimums. "
+                        "check_tendon_path_clearance: sample a straight segment for collisions with solid material."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "compute_anchor_points", "check_tendon_curvature", "check_tendon_path_clearance"]},
+                            "joint_positions_mm": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
+                            "segment_radii_mm": {"type": "array", "items": {"type": "number"}},
+                            "offset_fraction": {"type": "number", "default": 0.8},
+                            "anchor_points_mm": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
+                            "cable_type": {"type": "string", "enum": [
+                                "fishing_line_20lb", "fishing_line_50lb", "paracord_thin",
+                                "steel_cable_1mm", "dyneema_1mm"]},
+                            "min_bend_radius_mm": {"type": "number"},
+                            "shape": {"type": "string"},
+                            "point_a_mm": {"type": "array", "items": {"type": "number"}},
+                            "point_b_mm": {"type": "array", "items": {"type": "number"}},
+                            "samples": {"type": "integer", "default": 10},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+                ),
+
+                types.Tool(
+                    name="contact_pressure_operations",
+                    description=(
+                        "Geometric proxy analysis for socket-to-limb contact/fit quality (NOT FEA "
+                        "or clinical pressure mapping — a first-pass screen). sample_socket_clearance: "
+                        "grid-sample the socket's inner surface against a limb model. "
+                        "summarize_pressure_zones: cluster flagged samples into actionable problem zones."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "sample_socket_clearance", "summarize_pressure_zones"]},
+                            "socket_shape": {"type": "string"},
+                            "limb_model_shape": {"type": "string"},
+                            "samples_per_face": {"type": "integer", "default": 5},
+                            "inner_face_indices": {"type": "array", "items": {"type": "integer"}},
+                            "samples": {"type": "array", "items": {"type": "object"},
+                                        "description": "Output of sample_socket_clearance, passed to summarize_pressure_zones"},
+                            "cluster_radius_mm": {"type": "number", "default": 5.0},
+                            "risk_levels": {"type": "array", "items": {"type": "string"},
+                                            "default": ["overlap", "high_pressure"]},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+                ),
+
+                types.Tool(
+                    name="growth_socket_operations",
+                    description=(
+                        "Telescoping / nested-liner pediatric socket generation. create_outer_shell: "
+                        "fixed shell sized to accept the largest liner plus clearance. "
+                        "create_liner_family: a size family of liner inserts from one base profile."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "create_outer_shell", "create_liner_family"]},
+                            "profile_sketch": {"type": "string"},
+                            "length_mm": {"type": "number", "default": 120.0},
+                            "max_liner_offset_mm": {"type": "number", "default": 6.0},
+                            "wall_thickness_mm": {"type": "number", "default": 3.0},
+                            "clearance_mm": {"type": "number", "default": 0.3},
+                            "name": {"type": "string"},
+                            "growth_offsets_mm": {"type": "array", "items": {"type": "number"}, "default": [0, 2, 4, 6]},
+                            "liner_thickness_mm": {"type": "number", "default": 2.0},
+                            "name_prefix": {"type": "string"},
+                        },
+                        "required": ["operation", "profile_sketch"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
+
+                types.Tool(
+                    name="quick_connect_operations",
+                    description=(
+                        "Parametric socket-to-terminal-device quick-connect interfaces. "
+                        "list_connector_presets: built-in presets. create_bayonet_pair / "
+                        "create_threaded_pair: matched male/female halves. "
+                        "add_magnetic_retention: retention-aid recesses on an existing pair "
+                        "(does not replace the mechanical lock)."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "list_connector_presets", "create_bayonet_pair",
+                                "create_threaded_pair", "add_magnetic_retention"]},
+                            "diameter_mm": {"type": "number"},
+                            "lug_count": {"type": "integer", "default": 3},
+                            "lug_length_mm": {"type": "number", "default": 6.0},
+                            "lug_thickness_mm": {"type": "number", "default": 2.0},
+                            "lug_travel_deg": {"type": "number", "default": 30.0},
+                            "barrel_length_mm": {"type": "number", "default": 15.0},
+                            "male_position_mm": {"type": "array", "items": {"type": "number"}},
+                            "female_position_mm": {"type": "array", "items": {"type": "number"}},
+                            "name_prefix": {"type": "string"},
+                            "pitch_mm": {"type": "number", "default": 2.0},
+                            "length_mm": {"type": "number", "default": 15.0},
+                            "male_shape": {"type": "string"},
+                            "female_shape": {"type": "string"},
+                            "magnet_diameter_mm": {"type": "number", "default": 6.0},
+                            "magnet_thickness_mm": {"type": "number", "default": 2.0},
+                            "position_mm": {"type": "array", "items": {"type": "number"}},
+                            "name_suffix": {"type": "string"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
+
+                types.Tool(
+                    name="fitting_history_operations",
+                    description=(
+                        "Session-log layer over save_fixture/compare_to_fixture for tracking "
+                        "prosthetic socket-fitting iterations per patient over time. "
+                        "log_fitting_session: snapshot geometry + append structured session notes. "
+                        "get_fitting_history: full logged history for a patient_id. "
+                        "compare_to_last_fitting: geometric diff against the most recent session. "
+                        "patient_id must be a non-identifying code (initials + number), never PII."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "log_fitting_session", "get_fitting_history", "compare_to_last_fitting"]},
+                            "shape": {"type": "string"},
+                            "patient_id": {"type": "string", "description": "Non-identifying code, alphanumerics/underscores/hyphens only"},
+                            "session_notes": {"type": "string"},
+                            "pressure_complaints": {"type": "array", "items": {"type": "string"}},
+                            "donning_time_sec": {"type": "number"},
+                            "fit_rating": {"type": "integer", "description": "Subjective fit rating 1-5"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
+
+                types.Tool(
+                    name="lightweight_operations",
+                    description=(
+                        "Load-guided infill/lattice density recommendations for reducing prosthetic "
+                        "part weight. Geometric proxy screening, NOT a structural solver — validate "
+                        "any load-bearing print with a physical test. recommend_density_map: grid "
+                        "cells scored by proximity to an approximate load path. "
+                        "estimate_weight_savings: solid-vs-lightweighted weight estimate."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "recommend_density_map", "estimate_weight_savings"]},
+                            "shape": {"type": "string"},
+                            "load_start_mm": {"type": "array", "items": {"type": "number"}},
+                            "load_end_mm": {"type": "array", "items": {"type": "number"}},
+                            "axis_divisions": {"type": "integer", "default": 6},
+                            "cross_divisions": {"type": "integer", "default": 3},
+                            "cells": {"type": "array", "items": {"type": "object"},
+                                      "description": "Output of recommend_density_map, passed to estimate_weight_savings"},
+                            "material_density_g_cm3": {"type": "number", "default": 1.24},
+                        },
+                        "required": ["operation", "shape"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+                ),
             ]
             return base_tools + smart_dispatchers
 
@@ -2491,7 +2702,8 @@ async def main():
                       "macro_operations", "api_introspection",
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
-                      "organic_operations", "surface_operations", "fillet_chamfer"]:
+                      "organic_operations", "surface_operations", "fillet_chamfer",
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection

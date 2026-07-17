@@ -24,6 +24,13 @@ from .introspection_ops import IntrospectionOpsHandler
 from .sketch_builder_ops import SketchBuilderOpsHandler
 from .verification_ops import VerificationOpsHandler
 from .fixture_ops import FixtureOpsHandler
+from .compliant_ops import CompliantOpsHandler
+from .tendon_routing_ops import TendonRoutingHandler
+from .contact_pressure_ops import ContactPressureOpsHandler
+from .growth_socket_ops import GrowthSocketOpsHandler
+from .quick_connect_ops import QuickConnectOpsHandler
+from .fitting_history_ops import FittingHistoryOpsHandler
+from .lightweight_ops import LightweightOpsHandler
 
 __all__ = [
     'BaseHandler',
@@ -49,4 +56,11 @@ __all__ = [
     'SketchBuilderOpsHandler',
     'VerificationOpsHandler',
     'FixtureOpsHandler',
+    'CompliantOpsHandler',
+    'TendonRoutingHandler',
+    'ContactPressureOpsHandler',
+    'GrowthSocketOpsHandler',
+    'QuickConnectOpsHandler',
+    'FittingHistoryOpsHandler',
+    'LightweightOpsHandler',
 ]

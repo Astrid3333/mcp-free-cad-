@@ -178,6 +178,13 @@ try:
         SketchBuilderOpsHandler,
         VerificationOpsHandler,
         FixtureOpsHandler,
+        CompliantOpsHandler,
+        TendonRoutingHandler,
+        ContactPressureOpsHandler,
+        GrowthSocketOpsHandler,
+        QuickConnectOpsHandler,
+        FittingHistoryOpsHandler,
+        LightweightOpsHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -322,6 +329,13 @@ class FreeCADSocketServer:
         self.introspection_ops = IntrospectionOpsHandler(self, _log_operation, _capture_state)
         self.sketch_builder_ops = SketchBuilderOpsHandler(self, _log_operation, _capture_state)
         self.verification_ops = VerificationOpsHandler(self, _log_operation, _capture_state)
+        self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
+        self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
+        self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
+        self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
+        self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
+        self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
+        self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
         self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
         # GUI-sensitive handlers get the task queues for thread safety
         self.view_ops = ViewOpsHandler(
@@ -1029,6 +1043,13 @@ class FreeCADSocketServer:
             "api_introspection": self.introspection_ops,
             "geometric_verification": self.verification_ops,
             "fixture_operations": self.fixture_ops,
+            "compliant_operations": self.compliant_ops,
+            "tendon_routing_operations": self.tendon_routing_ops,
+            "contact_pressure_operations": self.contact_pressure_ops,
+            "growth_socket_operations": self.growth_socket_ops,
+            "quick_connect_operations": self.quick_connect_ops,
+            "fitting_history_operations": self.fitting_history_ops,
+            "lightweight_operations": self.lightweight_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
@@ -1527,6 +1548,13 @@ class FreeCADSocketServer:
                 'handlers.sketch_builder_ops',
                 'handlers.verification_ops',
                 'handlers.fixture_ops',
+                'handlers.compliant_ops',
+                'handlers.tendon_routing_ops',
+                'handlers.contact_pressure_ops',
+                'handlers.growth_socket_ops',
+                'handlers.quick_connect_ops',
+                'handlers.fitting_history_ops',
+                'handlers.lightweight_ops',
             ]
             for mod_name in handler_modules:
                 mod = sys.modules.get(mod_name)
@@ -1562,6 +1590,13 @@ class FreeCADSocketServer:
                 SketchBuilderOpsHandler,
                 VerificationOpsHandler,
                 FixtureOpsHandler,
+                CompliantOpsHandler,
+                TendonRoutingHandler,
+                ContactPressureOpsHandler,
+                GrowthSocketOpsHandler,
+                QuickConnectOpsHandler,
+                FittingHistoryOpsHandler,
+                LightweightOpsHandler,
             )
 
             # Re-create handler instances
@@ -1584,6 +1619,13 @@ class FreeCADSocketServer:
             self.introspection_ops = IntrospectionOpsHandler(self, _log_operation, _capture_state)
             self.sketch_builder_ops = SketchBuilderOpsHandler(self, _log_operation, _capture_state)
             self.verification_ops = VerificationOpsHandler(self, _log_operation, _capture_state)
+            self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
+            self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
+            self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
+            self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
+            self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
+            self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
+            self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
             self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
             self.view_ops = ViewOpsHandler(
                 self, self._gui_task_queue, self._gui_response_queue,
