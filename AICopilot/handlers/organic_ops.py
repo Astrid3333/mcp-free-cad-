@@ -1,0 +1,332 @@
+# Organic/freeform geometry handlers for FreeCAD MCP
+#
+# Cross-section-stack and loft-based solid generation for anatomical forms
+# (prosthetic sockets, limb-following geometry) that can't be expressed
+# with rigid primitives (box/cylinder/cone).
+#
+# Design decisions:
+#   - Sections are built as raw Part wires (circle / ellipse / rounded
+#     rectangle), NOT Sketcher sketches. This avoids the datum-plane +
+#     attachment complexity of parametric sketches, at the cost of the
+#     result being less "editable later" than a Sketcher-based feature.
+#     Good enough for a first-pass anatomical proxy; can be upgraded to
+#     sketch-based sections later if parametric editability is needed.
+#   - Only a practical subset of the tool's declared operation enum is
+#     implemented here (cross_section_stack, organic_loft, skin_solid,
+#     offset_surface). The others (bspline_surface, blend_surface,
+#     point_cloud_surface, etc.) are declared in the tool schema for
+#     future work but will currently return "operation not allowed"
+#     until handlers are added below.
+
+import json
+import math
+from typing import Any, Dict, List
+
+import FreeCAD
+import Part
+
+from .base import BaseHandler
+
+
+# ---------------------------------------------------------------------------
+# Section-wire builders
+# ---------------------------------------------------------------------------
+
+def _rounded_rect_wire(width: float, height: float, corner_radius: float) -> "Part.Wire":
+    """Build a closed wire for a rounded rectangle centered at the origin,
+    in the local XY plane."""
+    w2, h2 = width / 2.0, height / 2.0
+    r = max(0.0, min(corner_radius, w2, h2))
+
+    if r <= 1e-6:
+        pts = [
+            FreeCAD.Vector(-w2, -h2, 0), FreeCAD.Vector(w2, -h2, 0),
+            FreeCAD.Vector(w2, h2, 0), FreeCAD.Vector(-w2, h2, 0),
+            FreeCAD.Vector(-w2, -h2, 0),
+        ]
+        return Part.makePolygon(pts)
+
+    # Four straight edges + four corner arcs, going counter-clockwise
+    # starting at the bottom edge's left end.
+    edges = []
+    corners = [
+        # (arc_center, start_angle_deg, end_angle_deg)
+        (FreeCAD.Vector(w2 - r, -h2 + r, 0), -90, 0),
+        (FreeCAD.Vector(w2 - r, h2 - r, 0), 0, 90),
+        (FreeCAD.Vector(-w2 + r, h2 - r, 0), 90, 180),
+        (FreeCAD.Vector(-w2 + r, -h2 + r, 0), 180, 270),
+    ]
+    line_starts = [
+        (FreeCAD.Vector(-w2 + r, -h2, 0), FreeCAD.Vector(w2 - r, -h2, 0)),
+        (FreeCAD.Vector(w2, -h2 + r, 0), FreeCAD.Vector(w2, h2 - r, 0)),
+        (FreeCAD.Vector(w2 - r, h2, 0), FreeCAD.Vector(-w2 + r, h2, 0)),
+        (FreeCAD.Vector(-w2, h2 - r, 0), FreeCAD.Vector(-w2, -h2 + r, 0)),
+    ]
+    for (p1, p2), (center, a1, a2) in zip(line_starts, corners):
+        edges.append(Part.makeLine(p1, p2))
+        edges.append(Part.makeCircle(r, center, FreeCAD.Vector(0, 0, 1), a1, a2))
+
+    wire = Part.Wire(Part.__sortEdges__(edges) if hasattr(Part, "__sortEdges__") else edges)
+    return wire
+
+
+def _ellipse_wire(width: float, height: float) -> "Part.Wire":
+    """Closed elliptical wire centered at the origin, local XY plane.
+    width/height are full diameters along X/Y (matches cross_section_stack
+    docstring convention); a circle is just width == height."""
+    major = max(width, height) / 2.0
+    minor = min(width, height) / 2.0
+    if major <= 1e-6:
+        raise ValueError("width/height must be > 0")
+    ell = Part.Ellipse(FreeCAD.Vector(0, 0, 0), major, minor)
+    edge = ell.toShape()
+    wire = Part.Wire([edge])
+    if width < height:
+        # Ellipse() puts the major axis along local X; rotate 90 deg so the
+        # larger dimension lines up with height, matching caller intent.
+        wire.rotate(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 90)
+    return wire
+
+
+def _circle_wire(width: float) -> "Part.Wire":
+    radius = width / 2.0
+    if radius <= 1e-6:
+        raise ValueError("width (diameter) must be > 0")
+    edge = Part.makeCircle(radius)
+    return Part.Wire([edge])
+
+
+def _section_wire(shape: str, width: float, height: float, corner_radius: float) -> "Part.Wire":
+    shape = (shape or "circle").lower()
+    if shape == "circle":
+        return _circle_wire(width)
+    if shape == "ellipse":
+        return _ellipse_wire(width, height or width)
+    if shape == "rounded_rect":
+        return _rounded_rect_wire(width, height or width, corner_radius or 0.0)
+    raise ValueError(f"Unknown section shape {shape!r}. Use circle|ellipse|rounded_rect.")
+
+
+_AXIS_VECTORS = {
+    "x": FreeCAD.Vector(1, 0, 0),
+    "y": FreeCAD.Vector(0, 1, 0),
+    "z": FreeCAD.Vector(0, 0, 1),
+}
+
+
+def _place_section(wire: "Part.Wire", axis: str, position: float, twist_deg: float = 0.0):
+    """Move a section wire (built flat in local XY, normal +Z) so its plane
+    is perpendicular to `axis` and it sits at `position` mm along that axis.
+    Optional twist_deg rotates the section about the axis before placement
+    (useful for anatomically-twisted forms like a transradial socket)."""
+    axis = axis.lower()
+    if axis not in _AXIS_VECTORS:
+        raise ValueError(f"axis must be x, y, or z, got {axis!r}")
+
+    if twist_deg:
+        wire.rotate(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), twist_deg)
+
+    if axis == "z":
+        placement = FreeCAD.Placement(FreeCAD.Vector(0, 0, position), FreeCAD.Rotation())
+    elif axis == "x":
+        # Rotate local-XY-plane wire so its normal points along +X, then
+        # translate along X.
+        rot = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), 90)
+        placement = FreeCAD.Placement(FreeCAD.Vector(position, 0, 0), rot)
+    else:  # y
+        rot = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), -90)
+        placement = FreeCAD.Placement(FreeCAD.Vector(0, position, 0), rot)
+
+    wire.Placement = placement
+    return wire
+
+
+class OrganicOpsHandler(BaseHandler):
+    """Freeform / organic solid modeling for forms rigid primitives can't
+    express: prosthetic sockets, anatomical cross-sections, biomorphic
+    forms. See module docstring for which of the schema's declared
+    operations are actually implemented."""
+
+    _ALLOWED_OPERATIONS = frozenset({
+        "cross_section_stack", "organic_loft", "skin_solid", "offset_surface",
+    })
+
+    # ------------------------------------------------------------------
+    def cross_section_stack(self, args: Dict[str, Any]) -> str:
+        """Build a parametric solid by lofting through a stack of 2D
+        cross-sections placed along an axis. Ideal for anatomical forms
+        like prosthetic sockets specified as a series of measurements
+        (e.g. circumferences/widths at different heights).
+
+        Args:
+          doc_name:  FreeCAD document name
+          sections:  list of {position, shape, width, height, corner_radius,
+                     twist_deg} — see tool schema for the full example.
+          axis:      "x" | "y" | "z" — axis sections are stacked along
+          name:      name for the resulting solid
+          ruled:     if True, linear interpolation between sections instead
+                     of a smooth loft (sharper transitions, useful for
+                     angular/rounded-rect stacks)
+          closed_loft: close the loft back to the first section
+
+        Returns JSON with the created object's name, or an error.
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            sections = args.get("sections") or []
+            if len(sections) < 2:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "sections must have at least 2 entries"})
+
+            axis = str(args.get("axis", "z"))
+            name = args.get("name") or "OrganicSolid"
+            ruled = bool(args.get("ruled", False))
+            closed_loft = bool(args.get("closed_loft", False))
+
+            wires = []
+            for i, sec in enumerate(sections):
+                try:
+                    w = _section_wire(
+                        sec.get("shape", "circle"),
+                        float(sec.get("width", 10.0)),
+                        float(sec.get("height", 0.0)) or float(sec.get("width", 10.0)),
+                        float(sec.get("corner_radius", 0.0)),
+                    )
+                    _place_section(w, axis, float(sec.get("position", 0.0)),
+                                    float(sec.get("twist_deg", 0.0)))
+                    wires.append(w)
+                except Exception as sec_err:
+                    return json.dumps({"ok": False, "details": {"section_index": i},
+                                        "message": f"Error building section {i}: {sec_err}"})
+
+            solid = Part.makeLoft(wires, True, ruled, closed_loft)
+
+            feature = doc.addObject("Part::Feature", name)
+            feature.Shape = solid
+            doc.recompute()
+
+            return json.dumps({
+                "ok": True,
+                "details": {"feature_name": feature.Name, "section_count": len(wires),
+                             "axis": axis, "ruled": ruled},
+                "message": (
+                    f"Created '{feature.Name}' from {len(wires)} cross-sections "
+                    f"along {axis}-axis ({'ruled' if ruled else 'smooth'} loft). "
+                    f"This is a geometric proxy, not a scanned/clinical fit — "
+                    f"validate against the actual limb model before fabrication."
+                ),
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in cross_section_stack: {e}"})
+
+    # ------------------------------------------------------------------
+    def organic_loft(self, args: Dict[str, Any]) -> str:
+        """Loft between existing named sketches/wires in the document, with
+        optional ruled/ closed_loft behavior. Unlike cross_section_stack
+        (which generates its own sections from measurements), this lofts
+        through profiles you've already built (e.g. via sketch_operations).
+
+        Args:
+          doc_name:   FreeCAD document name
+          profiles:   list of sketch/wire object names, in loft order
+          name:       name for the resulting solid
+          ruled, closed_loft: same as cross_section_stack
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            profile_names: List[str] = args.get("profiles") or []
+            if len(profile_names) < 2:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "profiles must list at least 2 sketch/wire names"})
+
+            name = args.get("name") or "OrganicLoft"
+            ruled = bool(args.get("ruled", False))
+            closed_loft = bool(args.get("closed_loft", False))
+
+            wires = []
+            for pname in profile_names:
+                obj = self.get_object(pname, doc)
+                if not obj:
+                    return json.dumps({"ok": False, "details": {},
+                                        "message": f"Profile object not found: {pname}"})
+                shp = getattr(obj, "Shape", None)
+                if shp is None or shp.Wires == []:
+                    return json.dumps({"ok": False, "details": {},
+                                        "message": f"Object {pname} has no usable wire"})
+                wires.append(shp.Wires[0])
+
+            solid = Part.makeLoft(wires, True, ruled, closed_loft)
+            feature = doc.addObject("Part::Feature", name)
+            feature.Shape = solid
+            doc.recompute()
+
+            return json.dumps({
+                "ok": True,
+                "details": {"feature_name": feature.Name, "profile_count": len(wires)},
+                "message": f"Created '{feature.Name}' lofting through {len(wires)} profiles.",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in organic_loft: {e}"})
+
+    # ------------------------------------------------------------------
+    def skin_solid(self, args: Dict[str, Any]) -> str:
+        """Close a set of named cross-section wires into a solid skin.
+        Thin wrapper over the same loft machinery as organic_loft, kept as
+        a separate operation name to match the tool schema's vocabulary
+        (skin vs loft terminology from surfacing workflows)."""
+        return self.organic_loft(args)
+
+    # ------------------------------------------------------------------
+    def offset_surface(self, args: Dict[str, Any]) -> str:
+        """Uniform-thickness offset (shell) of an existing shape — e.g. to
+        turn a lofted socket outer surface into a walled shell of a given
+        thickness.
+
+        Args:
+          doc_name, shape (object name to offset), offset (mm, default 2),
+          name: name for the resulting object
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            object_name = args.get("shape") or args.get("object_name")
+            if not object_name:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "Missing required argument: shape"})
+            obj = self.get_object(object_name, doc)
+            if not obj or not hasattr(obj, "Shape"):
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Object not found or has no Shape: {object_name}"})
+
+            offset = float(args.get("offset", 2.0))
+            name = args.get("name") or f"{object_name}_Offset"
+
+            new_shape = obj.Shape.makeOffsetShape(offset, 1e-3, fill=False)
+            feature = doc.addObject("Part::Feature", name)
+            feature.Shape = new_shape
+            doc.recompute()
+
+            return json.dumps({
+                "ok": True,
+                "details": {"feature_name": feature.Name, "offset_mm": offset},
+                "message": f"Created offset surface '{feature.Name}' ({offset} mm).",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in offset_surface: {e}"})

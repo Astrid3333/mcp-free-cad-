@@ -31,6 +31,7 @@ from .growth_socket_ops import GrowthSocketOpsHandler
 from .quick_connect_ops import QuickConnectOpsHandler
 from .fitting_history_ops import FittingHistoryOpsHandler
 from .lightweight_ops import LightweightOpsHandler
+from .organic_ops import OrganicOpsHandler
 
 __all__ = [
     'BaseHandler',
