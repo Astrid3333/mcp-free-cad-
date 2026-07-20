@@ -29,7 +29,7 @@ class GrowthSocketOpsHandler(BaseHandler):
     """Telescoping / nested-liner socket generation for pediatric prosthetics."""
 
     _ALLOWED_OPERATIONS = frozenset({
-        "create_liner_family", "create_outer_shell",
+        "create_liner_family", "create_outer_shell", "create_outer_shell_parametric",
     })
 
     # ------------------------------------------------------------------
@@ -176,3 +176,125 @@ class GrowthSocketOpsHandler(BaseHandler):
         except Exception as e:
             return json.dumps({"ok": False, "details": {},
                                 "message": f"Error in create_liner_family: {e}"})
+
+
+    # ------------------------------------------------------------------
+    def create_outer_shell_parametric(self, args: Dict[str, Any]) -> str:
+        """Create the outer socket shell as a native FreeCAD FeaturePython
+        object, so that changing WallThicknessMM / LengthMM / etc. (e.g. via
+        Spreadsheet ExpressionEngine bindings) and calling doc.recompute()
+        regenerates the shape automatically -- no repeat tool call needed.
+
+        Same geometry logic as create_outer_shell, but parameters live as
+        real Properties on the object instead of one-shot args.
+
+        Args:
+          profile_sketch: name of a closed Sketch defining the socket's
+                           outer cross-section profile
+          length_mm, max_liner_offset_mm, wall_thickness_mm, clearance_mm:
+                           same meaning as create_outer_shell
+          name:            name for the resulting object
+
+        Returns JSON with the created object's name.
+        """
+        try:
+            profile_name = args.get("profile_sketch", "")
+            length = float(args.get("length_mm", 120.0))
+            max_liner_offset = float(args.get("max_liner_offset_mm", 6.0))
+            wall = float(args.get("wall_thickness_mm", 3.0))
+            clearance = float(args.get("clearance_mm", 0.3))
+            name = args.get("name", "SocketOuterShellFP")
+
+            if not profile_name:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "Missing required argument: profile_sketch"})
+
+            doc = self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "No active FreeCAD document"})
+
+            profile = self.get_object(profile_name, doc)
+            if not profile:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Profile sketch not found: {profile_name}"})
+
+            fp = doc.addObject("Part::FeaturePython", name)
+            SocketOuterShellProxy(fp)
+            fp.ProfileSketch = profile
+            fp.LengthMM = length
+            fp.MaxLinerOffsetMM = max_liner_offset
+            fp.WallThicknessMM = wall
+            fp.ClearanceMM = clearance
+            doc.recompute()
+
+            return json.dumps({
+                "ok": True,
+                "details": {"shell_name": fp.Name},
+                "message": (
+                    f"Created parametric outer shell '{fp.Name}'. Its "
+                    f"WallThicknessMM/LengthMM/MaxLinerOffsetMM/ClearanceMM "
+                    f"properties can now be bound to a Spreadsheet via "
+                    f"setExpression(...) for native recompute-on-change."
+                ),
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in create_outer_shell_parametric: {e}"})
+
+
+class SocketOuterShellProxy:
+    """FeaturePython proxy for a recompute-driven socket outer shell.
+
+    Ports the geometry logic from GrowthSocketOpsHandler.create_outer_shell
+    into execute(), reading from real Properties instead of a one-shot args
+    dict, so FreeCAD's native recompute (e.g. triggered by a bound
+    Spreadsheet cell changing) regenerates the shape with no MCP round-trip.
+    """
+
+    def __init__(self, fp):
+        fp.addProperty("App::PropertyLink", "ProfileSketch", "Socket",
+                        "Sketch defining outer cross-section profile")
+        fp.addProperty("App::PropertyLength", "LengthMM", "Socket",
+                        "Socket length along extrusion axis").LengthMM = 120.0
+        fp.addProperty("App::PropertyLength", "MaxLinerOffsetMM", "Socket",
+                        "Largest liner offset the shell must accept").MaxLinerOffsetMM = 6.0
+        fp.addProperty("App::PropertyLength", "WallThicknessMM", "Socket",
+                        "Shell wall thickness").WallThicknessMM = 3.0
+        fp.addProperty("App::PropertyLength", "ClearanceMM", "Socket",
+                        "Gap between largest liner and shell inner wall").ClearanceMM = 0.3
+        fp.Proxy = self
+
+    def execute(self, fp):
+        import Part
+        import FreeCAD
+
+        profile = fp.ProfileSketch
+        if profile is None:
+            FreeCAD.Console.PrintWarning(f"{fp.Name}: ProfileSketch not set, skipping recompute\n")
+            return
+
+        length = float(fp.LengthMM.Value)
+        max_liner_offset = float(fp.MaxLinerOffsetMM.Value)
+        wall = float(fp.WallThicknessMM.Value)
+        clearance = float(fp.ClearanceMM.Value)
+
+        outer_offset_total = max_liner_offset + clearance + wall
+        inner_offset_total = max_liner_offset + clearance
+
+        base_face = Part.Face(Part.Wire(profile.Shape.Edges))
+        outer_face = base_face.makeOffset2D(outer_offset_total)
+        inner_face = base_face.makeOffset2D(inner_offset_total)
+
+        outer_solid = outer_face.extrude(FreeCAD.Vector(0, 0, length))
+        inner_solid = inner_face.extrude(FreeCAD.Vector(0, 0, length))
+        fp.Shape = outer_solid.cut(inner_solid)
+
+    def onChanged(self, fp, prop):
+        pass
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None

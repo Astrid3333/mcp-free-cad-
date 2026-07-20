@@ -2393,7 +2393,8 @@ async def main():
                         "type": "object",
                         "properties": {
                             "operation": {"type": "string", "enum": [
-                                "create_outer_shell", "create_liner_family"]},
+                                "create_outer_shell", "create_liner_family",
+                                "create_outer_shell_parametric"]},
                             "profile_sketch": {"type": "string"},
                             "length_mm": {"type": "number", "default": 120.0},
                             "max_liner_offset_mm": {"type": "number", "default": 6.0},
