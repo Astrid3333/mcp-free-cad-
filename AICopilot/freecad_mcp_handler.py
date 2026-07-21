@@ -185,6 +185,7 @@ try:
         QuickConnectOpsHandler,
         FittingHistoryOpsHandler,
         LightweightOpsHandler,
+        OrganicOpsHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -1599,6 +1600,7 @@ class FreeCADSocketServer:
                 QuickConnectOpsHandler,
                 FittingHistoryOpsHandler,
                 LightweightOpsHandler,
+                OrganicOpsHandler,
             )
 
             # Re-create handler instances

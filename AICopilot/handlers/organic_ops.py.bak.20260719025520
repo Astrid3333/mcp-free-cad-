@@ -113,28 +113,6 @@ def _polygon_wire(points) -> "Part.Wire":
     return Part.makePolygon(vecs)
 
 
-def _smooth_polygon_wire(points) -> "Part.Wire":
-    """Closed wire built from explicit (x, y) points in the local XY plane,
-    interpolated with a smooth PERIODIC B-spline (not straight edges).
-
-    Use for organic/anatomical sections where the perimeter itself should
-    read as a continuous curve rather than a faceted polygon -- e.g. an
-    asymmetric socket cross-section from
-    herramientas-auxiliares/protesis/perfil_seccion_asimetrica.py.
-
-    points: list of (x, y) tuples/lists, in mm, local to the section plane.
-    At least 4 points required (a periodic spline needs enough points to
-    define curvature around the loop). Do not repeat the first point at
-    the end -- periodicity is handled by the BSplineCurve itself.
-    """
-    if len(points) < 4:
-        raise ValueError("smooth_polygon section needs at least 4 points")
-    vecs = [FreeCAD.Vector(float(x), float(y), 0) for x, y in points]
-    curve = Part.BSplineCurve()
-    curve.interpolate(vecs, PeriodicFlag=True)
-    return Part.Wire([curve.toShape()])
-
-
 def _section_wire(shape: str, width: float, height: float, corner_radius: float,
                    points=None) -> "Part.Wire":
     shape = (shape or "circle").lower()
@@ -151,14 +129,7 @@ def _section_wire(shape: str, width: float, height: float, corner_radius: float,
                 "(list of [x, y] pairs) in the section dict"
             )
         return _polygon_wire(points)
-    if shape == "smooth_polygon":
-        if not points:
-            raise ValueError(
-                "shape='smooth_polygon' requires a non-empty 'points' list "
-                "(list of [x, y] pairs) in the section dict"
-            )
-        return _smooth_polygon_wire(points)
-    raise ValueError(f"Unknown section shape {shape!r}. Use circle|ellipse|rounded_rect|polygon|smooth_polygon.")
+    raise ValueError(f"Unknown section shape {shape!r}. Use circle|ellipse|rounded_rect|polygon.")
 
 
 _AXIS_VECTORS = {

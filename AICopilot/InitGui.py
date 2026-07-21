@@ -27,6 +27,16 @@ else:
     if path not in sys.path:
         sys.path.append(path)
 
+    # Also add the parent directory so `import AICopilot.xxx` works (used by
+    # _reload_handlers()'s self-reload step). Without this, AICopilot/ itself
+    # is importable-from (handlers, freecad_mcp_handler, ...) but the
+    # AICopilot package name itself is not, since its own parent was never
+    # on sys.path -- namespace-package import of "AICopilot.freecad_mcp_handler"
+    # then fails with "No module named 'AICopilot'".
+    parent_path = os.path.dirname(path)
+    if parent_path and parent_path not in sys.path:
+        sys.path.append(parent_path)
+
     class GlobalAIService:
         """Global MCP socket service that runs across all workbenches."""
 
