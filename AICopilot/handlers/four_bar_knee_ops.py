@@ -212,6 +212,48 @@ class DampingParams:
             vs.append(v)
         return ts, xs, vs
 
+    def simulate_pendulum_response(self, theta0_deg: float = None,
+                                    t_max: float = 10.0, dt: float = 0.001,
+                                    l: float = 1.0, g: float = 9.81):
+        """
+        Integra el péndulo simple amortiguado no lineal (ecuación real del
+        paper, Fig. 6-7 y Resultados):
+
+            theta'' = -(b/l)*theta' - (g/l)*sin(theta)
+
+        Este es el modelo que efectivamente reproduce las gráficas 9-12 del
+        paper (oscilación sin amortiguamiento -> estabilización rápida con
+        amortiguamiento), a diferencia de simulate_free_response() que
+        integra la ecuación lineal masa-resorte-amortiguador (Fig. 5) con un
+        x(0) inventado -- esa no es la que generó las curvas reportadas.
+
+        Valores de referencia del paper (sección Resultados): resorte
+        k=100 N/m, amortiguador b=10 Ns/m, condición inicial theta0=45°
+        (0.785 rad). Nota: el paper reporta k y b como constantes de un
+        sistema masa-resorte-amortiguador, pero las grafica vía el péndulo
+        -- para reusarlas acá simplemente se pasan como coeficientes de la
+        ecuación del péndulo (b/l, no b/m); si en algún momento conseguís
+        los valores de m y l reales del prototipo, esto se puede ajustar a
+        una conversión física exacta en vez de una reutilización directa.
+
+        Devuelve listas (t, theta, theta_dot), con theta en radianes.
+        """
+        theta0_deg = theta0_deg if theta0_deg is not None else self.theta0_deg
+        theta = math.radians(theta0_deg)
+        theta_dot = 0.0
+        t = 0.0
+        ts, thetas, theta_dots = [t], [theta], [theta_dot]
+        n_steps = int(t_max / dt)
+        for _ in range(n_steps):
+            theta_ddot = -(self.b / l) * theta_dot - (g / l) * math.sin(theta)
+            theta_dot += theta_ddot * dt
+            theta += theta_dot * dt
+            t += dt
+            ts.append(t)
+            thetas.append(theta)
+            theta_dots.append(theta_dot)
+        return ts, thetas, theta_dots
+
 
 # ---------------------------------------------------------------------------
 # 3. Handler FreeCAD (hereda de BaseHandler -- sigue tu convención real)
