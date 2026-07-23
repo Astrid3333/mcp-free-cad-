@@ -32,6 +32,7 @@ from .quick_connect_ops import QuickConnectOpsHandler
 from .fitting_history_ops import FittingHistoryOpsHandler
 from .lightweight_ops import LightweightOpsHandler
 from .organic_ops import OrganicOpsHandler
+from .four_bar_knee_ops import FourBarKneeHandler
 
 __all__ = [
     'BaseHandler',

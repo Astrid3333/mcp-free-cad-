@@ -13,10 +13,18 @@
 #     sketch-based sections later if parametric editability is needed.
 #   - Only a practical subset of the tool's declared operation enum is
 #     implemented here (cross_section_stack, organic_loft, skin_solid,
-#     offset_surface). The others (bspline_surface, blend_surface,
-#     point_cloud_surface, etc.) are declared in the tool schema for
-#     future work but will currently return "operation not allowed"
-#     until handlers are added below.
+#     offset_surface, organic_sweep, section_profiles). The others
+#     (bspline_surface, blend_surface, point_cloud_surface, etc.) are
+#     declared in the tool schema for future work but will currently
+#     return "Unknown organic_operations operation: X" until handlers
+#     are added below.
+#   - organic_sweep and section_profiles are the two that actually break
+#     the "straight x/y/z axis only" limitation of cross_section_stack:
+#     organic_sweep follows an arbitrary curved spine via Part::Sweep
+#     (corrected-Frenet by default, i.e. no unwanted twist), and
+#     section_profiles samples cross-sections by arc length + tangent
+#     along a curved spine, feeding organic_loft with sections that
+#     actually bend in 3D instead of sitting on one straight line.
 
 import json
 import math
@@ -203,6 +211,7 @@ class OrganicOpsHandler(BaseHandler):
 
     _ALLOWED_OPERATIONS = frozenset({
         "cross_section_stack", "organic_loft", "skin_solid", "offset_surface",
+        "organic_sweep", "section_profiles",
     })
 
     # ------------------------------------------------------------------
@@ -385,3 +394,219 @@ class OrganicOpsHandler(BaseHandler):
         except Exception as e:
             return json.dumps({"ok": False, "details": {},
                                 "message": f"Error in offset_surface: {e}"})
+
+    # ------------------------------------------------------------------
+    def organic_sweep(self, args: Dict[str, Any]) -> str:
+        """Sweep a profile along a CURVED spine (path) — unlike
+        cross_section_stack / organic_loft, which only stack sections along
+        a straight x/y/z axis, this follows an arbitrary 3D curve (typically
+        a spline sketch built with sketch_operations). This is the primary
+        way to get true anatomical/biomorphic curvature rather than a
+        straight-axis proxy.
+
+        Args:
+          doc_name:  FreeCAD document name
+          spine:     name of an existing sketch/wire/edge object — the path
+                     the profile follows. Give it a spline (not a straight
+                     line) to actually get curvature.
+          profiles:  list whose first entry is the profile to sweep (a
+                     closed sketch/wire name); 'profile' is also accepted
+                     as a single-name shortcut.
+          solid:     close the result into a solid (default True)
+          frenet:    False (default) = corrected frame, no unwanted twist
+                     through inflection points ("normal correction" in the
+                     tool description). True = strict Frenet frame, which
+                     tracks the spine's own torsion exactly but can twist
+                     unexpectedly on straighter stretches.
+          name:      name for the resulting object
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            profile_names = args.get("profiles") or []
+            profile_name = (profile_names[0] if profile_names
+                             else args.get("profile") or args.get("profile_sketch"))
+            spine_name = args.get("spine")
+            if not profile_name:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "Missing required argument: profiles[0] (or 'profile') — "
+                                               "the closed section to sweep"})
+            if not spine_name:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "Missing required argument: spine — the path the profile follows"})
+
+            profile_obj = self.get_object(profile_name, doc)
+            if not profile_obj:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Profile object not found: {profile_name}"})
+            spine_obj = self.get_object(spine_name, doc)
+            if not spine_obj:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Spine object not found: {spine_name}"})
+
+            solid = bool(args.get("solid", True))
+            frenet = bool(args.get("frenet", False))
+            name = args.get("name") or "OrganicSweep"
+
+            sweep = doc.addObject("Part::Sweep", name)
+            sweep.Sections = [profile_obj]
+            sweep.Spine = spine_obj
+            sweep.Solid = solid
+            sweep.Frenet = frenet
+            doc.recompute()
+
+            if sweep.Shape is None or sweep.Shape.isNull():
+                return json.dumps({
+                    "ok": False, "details": {"feature_name": sweep.Name},
+                    "message": "Sweep produced an empty/invalid shape. Common causes: the spine has sharp "
+                               "kinks the profile can't follow, or the profile isn't roughly perpendicular "
+                               "to the spine's start tangent. Try frenet=true, or check the spine curve.",
+                })
+
+            return json.dumps({
+                "ok": True,
+                "details": {"feature_name": sweep.Name, "spine": spine_name,
+                             "profile": profile_name, "frenet": frenet},
+                "message": (
+                    f"Created '{sweep.Name}' sweeping '{profile_name}' along the curved spine '{spine_name}' "
+                    f"({'Frenet' if frenet else 'corrected/non-twisting'} frame). "
+                    f"This is a geometric proxy, not a scanned/clinical fit — validate before fabrication."
+                ),
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in organic_sweep: {e}"})
+
+    # ------------------------------------------------------------------
+    def section_profiles(self, args: Dict[str, Any]) -> str:
+        """Generate cross-section wires spaced by ARC LENGTH along a curved
+        spine, each oriented perpendicular to the spine's tangent at that
+        point — unlike cross_section_stack's sections, which sit at
+        positions along one straight x/y/z axis. Feed the resulting object
+        names, in order, into organic_loft's `profiles` argument to skin a
+        solid that actually bends in 3D.
+
+        Args:
+          doc_name:       FreeCAD document name
+          spine:          name of an existing sketch/wire/edge — the curve
+                           to sample sections along (use a spline for real
+                           curvature)
+          n_sections:     how many sections to generate (default 8, min 2)
+          shape:          circle | ellipse | rounded_rect | polygon |
+                           smooth_polygon — section shape for generated
+                           wires (default circle); ignored if profile_sketch
+                           is given
+          width, height, corner_radius, points: section size/shape params,
+                           same meaning as in cross_section_stack; constant
+                           across all generated sections in this pass
+          profile_sketch: (optional) name of an existing closed sketch/wire
+                           to clone and re-orient at each spine point
+                           instead of generating a fresh analytic section
+          name:           name prefix for generated objects (default
+                           "Section" -> Section_0, Section_1, ...)
+
+        Returns the ordered list of created object names.
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            spine_name = args.get("spine")
+            if not spine_name:
+                return json.dumps({"ok": False, "details": {}, "message": "Missing required argument: spine"})
+            spine_obj = self.get_object(spine_name, doc)
+            if not spine_obj or not hasattr(spine_obj, "Shape") or spine_obj.Shape.isNull():
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Spine object not found or has no usable shape: {spine_name}"})
+
+            edges = spine_obj.Shape.Edges
+            if not edges:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"Spine '{spine_name}' has no edges to sample"})
+            # Single continuous edge assumed for this pass; a multi-edge
+            # spine (several sketch segments) is combined into one Wire so
+            # arc length is measured across the whole path, but per-edge
+            # parametrization discontinuities at sharp corners aren't
+            # smoothed — use a single spline edge for best results.
+            edge = edges[0] if len(edges) == 1 else Part.Wire(edges)
+            total_length = edge.Length
+            if total_length <= 1e-6:
+                return json.dumps({"ok": False, "details": {}, "message": f"Spine '{spine_name}' has zero length"})
+
+            n_sections = int(args.get("n_sections", 8))
+            if n_sections < 2:
+                return json.dumps({"ok": False, "details": {}, "message": "n_sections must be >= 2"})
+
+            profile_sketch_name = args.get("profile_sketch")
+            if profile_sketch_name:
+                proto_obj = self.get_object(profile_sketch_name, doc)
+                if not proto_obj or not hasattr(proto_obj, "Shape") or not proto_obj.Shape.Wires:
+                    return json.dumps({"ok": False, "details": {},
+                                        "message": f"profile_sketch object not found or has no wire: {profile_sketch_name}"})
+                proto_wire = proto_obj.Shape.Wires[0]
+            else:
+                shape_kind = args.get("shape", "circle")
+                width = float(args.get("width", 10.0))
+                height = float(args.get("height", 0.0)) or width
+                corner_radius = float(args.get("corner_radius", 0.0))
+                proto_wire = _section_wire(shape_kind, width, height, corner_radius, args.get("points"))
+
+            name_prefix = args.get("name") or "Section"
+            created: List[str] = []
+            z_axis = FreeCAD.Vector(0, 0, 1)
+            for i in range(n_sections):
+                dist = (total_length * i) / (n_sections - 1)
+                try:
+                    param = edge.getParameterByLength(dist)
+                except Exception:
+                    # Fallback for curve types where getParameterByLength
+                    # isn't supported: uniform split by parameter instead
+                    # of arc length (less even, but never fails outright).
+                    p0, p1 = edge.FirstParameter, edge.LastParameter
+                    param = p0 + (p1 - p0) * (i / (n_sections - 1))
+
+                point = edge.valueAt(param)
+                try:
+                    tangent = edge.tangentAt(param)
+                except Exception:
+                    tangent = FreeCAD.Vector(0, 0, 1)
+                if tangent.Length < 1e-9:
+                    tangent = FreeCAD.Vector(0, 0, 1)
+                tangent.normalize()
+
+                wire = proto_wire.copy()
+                # proto_wire is flat in local XY with normal +Z; rotate so
+                # that normal aligns with the spine tangent at this point.
+                if tangent.cross(z_axis).Length < 1e-9:
+                    rot = (FreeCAD.Rotation() if tangent.z > 0
+                           else FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), 180))
+                else:
+                    rot = FreeCAD.Rotation(z_axis, tangent)
+                wire.Placement = FreeCAD.Placement(point, rot)
+
+                obj_name = f"{name_prefix}_{i}"
+                feature = doc.addObject("Part::Feature", obj_name)
+                feature.Shape = wire
+                created.append(feature.Name)
+
+            doc.recompute()
+
+            return json.dumps({
+                "ok": True,
+                "details": {"section_names": created, "spine": spine_name, "n_sections": n_sections},
+                "message": (
+                    f"Created {len(created)} cross-sections along the curved spine '{spine_name}' "
+                    f"(arc-length spaced, tangent-oriented). Pass these names, in order, as organic_loft's "
+                    f"'profiles' to skin a solid that follows the spine's curvature."
+                ),
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in section_profiles: {e}"})

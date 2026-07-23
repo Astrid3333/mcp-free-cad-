@@ -186,6 +186,7 @@ try:
         FittingHistoryOpsHandler,
         LightweightOpsHandler,
         OrganicOpsHandler,
+        FourBarKneeHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -333,6 +334,7 @@ class FreeCADSocketServer:
         self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
         self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
         self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
+        self.four_bar_knee_ops = FourBarKneeHandler(self, _log_operation, _capture_state)
         self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
         self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
         self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
@@ -1053,6 +1055,7 @@ class FreeCADSocketServer:
             "fitting_history_operations": self.fitting_history_ops,
             "lightweight_operations": self.lightweight_ops,
             "organic_operations": self.organic_ops,
+            "four_bar_knee_operations": self.four_bar_knee_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
@@ -1601,6 +1604,7 @@ class FreeCADSocketServer:
                 FittingHistoryOpsHandler,
                 LightweightOpsHandler,
                 OrganicOpsHandler,
+                FourBarKneeHandler,
             )
 
             # Re-create handler instances
@@ -1626,6 +1630,7 @@ class FreeCADSocketServer:
             self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
             self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
             self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
+            self.four_bar_knee_ops = FourBarKneeHandler(self, _log_operation, _capture_state)
             self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
             self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
             self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)

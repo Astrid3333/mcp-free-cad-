@@ -2143,6 +2143,18 @@ async def main():
                             "spine": {"type": "string", "description": "Spine sketch or edge name for sweep/loft guide"},
                             "ruled": {"type": "boolean", "description": "Use ruled (linear) interpolation instead of smooth for loft", "default": False},
                             "closed_loft": {"type": "boolean", "description": "Close the loft back to the first profile", "default": False},
+                            "solid": {"type": "boolean", "description": "organic_sweep: close the swept result into a solid instead of an open shell", "default": True},
+                            "frenet": {
+                                "type": "boolean", "default": False,
+                                "description": (
+                                    "organic_sweep only. False (default): corrected frame -- the profile is "
+                                    "carried along the spine without extra rotation, avoiding unwanted twist "
+                                    "through inflection points. Prefer this for most organic/anatomical forms. "
+                                    "True: strict Frenet frame -- tracks the spine's own curvature/torsion "
+                                    "exactly, which is correct for tightly-coiled or torsion-driven paths but "
+                                    "can twist unexpectedly on straighter stretches."
+                                ),
+                            },
 
                             # ── Cross-section stack (anatomical) ───────────
                             "axis": {
@@ -2155,8 +2167,14 @@ async def main():
                                 "type": "array",
                                 "description": (
                                     "For cross_section_stack: list of section descriptors.\n"
-                                    "Each item: {\"position\": <mm along axis>, \"shape\": \"circle|ellipse|rounded_rect\", "
-                                    "\"width\": <mm>, \"height\": <mm>, \"corner_radius\": <mm>, \"twist_deg\": <degrees>}\n"
+                                    "Each item: {\"position\": <mm along axis>, "
+                                    "\"shape\": \"circle|ellipse|rounded_rect|polygon|smooth_polygon\", "
+                                    "\"width\": <mm>, \"height\": <mm>, \"corner_radius\": <mm>, \"twist_deg\": <degrees>, "
+                                    "\"points\": <[[x,y],...], required for polygon/smooth_polygon>}\n"
+                                    "polygon: straight-edge closed outline through the given points. "
+                                    "smooth_polygon: same points, but interpolated as a smooth periodic curve -- "
+                                    "use for asymmetric organic sections (e.g. non-circular limb cross-sections) "
+                                    "where a faceted outline would look wrong.\n"
                                     "Example for a transradial socket:\n"
                                     "[{\"position\": 0, \"shape\": \"ellipse\", \"width\": 80, \"height\": 65},\n"
                                     " {\"position\": 50, \"shape\": \"ellipse\", \"width\": 72, \"height\": 58},\n"
@@ -2184,6 +2202,51 @@ async def main():
                             "profile_sketch": {"type": "string", "description": "Reference profile sketch to scale/transform at each section"},
                         },
                         "required": ["operation", "doc_name"]
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
+
+                types.Tool(
+                    name="four_bar_knee_operations",
+                    description=(
+                        "Polycentric four-bar knee linkage for transfemoral prostheses -- "
+                        "kinematic synthesis per Lopez-Ugalde, Flores-Renteria & Cortes-Sanchez "
+                        "(2020), 'Desarrollo de una protesis policentrica de bajo costo'. "
+                        "check_kinematics validates a candidate link-length set (Grashof "
+                        "condition, resulting angles, ICR path) without creating geometry -- "
+                        "use it before build_knee_mechanism when link lengths come from "
+                        "literature/estimates rather than a confirmed patient measurement. "
+                        "build_knee_mechanism creates the four links as simple box proxies at "
+                        "a given flexion angle and registers the fixed link as the output "
+                        "anchor for chaining to a pylon."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["check_kinematics", "build_knee_mechanism"],
+                                "description": (
+                                    "check_kinematics: dry-run validation, no FreeCAD geometry. "
+                                    "build_knee_mechanism: creates the four linkage bodies in the "
+                                    "active document."
+                                )
+                            },
+                            "r1": {"type": "number", "description": "Fixed link length OA-OB, mm (paper's 'd')"},
+                            "r2": {"type": "number", "description": "Anterior link length OA-A, mm (paper's 'a' -- shorter link, gives stability)"},
+                            "r3": {"type": "number", "description": "Posterior link length B-OB, mm (paper's 'c')"},
+                            "r4": {"type": "number", "description": "Input/coupler link length A-B, mm (paper's 'b' -- proximal attachment to thigh)"},
+                            "theta2_deg": {"type": "number", "default": 30.0, "description": "Input angle (link OA-A), degrees"},
+                            "icr_range_deg": {
+                                "type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+                                "description": "check_kinematics only: [lo, hi] sweep range for theta2 when tracing the ICR path, degrees. Default [10, 100]."
+                            },
+                            "icr_steps": {"type": "integer", "default": 30, "description": "check_kinematics only: number of samples across icr_range_deg"},
+                            "link_width": {"type": "number", "default": 6.0, "description": "build_knee_mechanism only: link cross-section width, mm (placeholder proxy geometry, not a validated structural section)"},
+                            "link_thickness": {"type": "number", "default": 4.0, "description": "build_knee_mechanism only: link cross-section thickness, mm (placeholder proxy geometry, not a validated structural section)"},
+                            "attach_to_socket": {"type": "boolean", "default": True, "description": "build_knee_mechanism only: try to position at the registered socket output anchor; harmless if none exists yet"},
+                        },
+                        "required": ["operation", "r1", "r2", "r3", "r4"]
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
                 ),
@@ -2704,7 +2767,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection
@@ -3139,6 +3202,37 @@ async def main():
                     capabilities=server.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},
+                    ),
+                    instructions=(
+                        "This server drives a real, currently-open FreeCAD document on the user's "
+                        "machine. Many users of this integration are NOT CAD experts — they describe "
+                        "intent in plain language and expect the geometry to just be correct. Follow "
+                        "these rules on every generative operation (organic_operations, "
+                        "cross_section_stack, partdesign_operations, part_operations, sketch/loft/sweep, "
+                        "booleans, etc.):\n"
+                        "1. VERIFY BEFORE DECLARING DONE. After creating or modifying geometry, check it "
+                        "(measurement_operations, spatial_query for interference, run_inspector, or "
+                        "geometric_verification as appropriate) before telling the user it's finished. "
+                        "Don't just report the object name the API returned.\n"
+                        "2. SHOW, DON'T JUST TELL. A non-expert can't picture 'OrganicSolid003'. Take a "
+                        "screenshot (view_control) after meaningful geometry changes so they can see the "
+                        "actual result, and describe it in everyday terms (rough size, shape) rather than "
+                        "FreeCAD object names.\n"
+                        "3. DON'T SILENTLY GUESS MEASUREMENTS. If a request implies a custom fit (a "
+                        "prosthetic socket, something sized to a body part or an existing object) and no "
+                        "measurement was given, ask for one instead of filling in a default and moving on.\n"
+                        "4. PREFER EDITABLE FEATURES WHEN THE USER IS LIKELY TO ITERATE. Raw Part::Feature "
+                        "shapes (used by cross_section_stack/organic_loft/organic_sweep) are NOT "
+                        "parametric — 'make it a bit wider' can't be applied as an edit, only regenerated "
+                        "from scratch with the same parameters plus the change. Keep track of the exact "
+                        "parameters you used so a follow-up tweak reproduces the same design with just "
+                        "that one value changed, rather than drifting.\n"
+                        "5. AN 'Unknown operation' OR 'operation not allowed' ERROR MEANS THE CAPABILITY "
+                        "ISN'T IMPLEMENTED, not that your input was wrong. Don't silently substitute a "
+                        "simpler/more rigid construction that changes what was asked for — tell the user "
+                        "what you're approximating and why.\n"
+                        "6. For organic_sweep, default to frenet=false (corrected frame) unless the path is "
+                        "tightly coiled — it avoids unwanted twist on typical anatomical/biomorphic spines."
                     ),
                 ),
             )

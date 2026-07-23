@@ -212,6 +212,48 @@ class DampingParams:
             vs.append(v)
         return ts, xs, vs
 
+    def simulate_pendulum_response(self, theta0_deg: float = None,
+                                    t_max: float = 10.0, dt: float = 0.001,
+                                    l: float = 1.0, g: float = 9.81):
+        """
+        Integra el péndulo simple amortiguado no lineal (ecuación real del
+        paper, Fig. 6-7 y Resultados):
+
+            theta'' = -(b/l)*theta' - (g/l)*sin(theta)
+
+        Este es el modelo que efectivamente reproduce las gráficas 9-12 del
+        paper (oscilación sin amortiguamiento -> estabilización rápida con
+        amortiguamiento), a diferencia de simulate_free_response() que
+        integra la ecuación lineal masa-resorte-amortiguador (Fig. 5) con un
+        x(0) inventado -- esa no es la que generó las curvas reportadas.
+
+        Valores de referencia del paper (sección Resultados): resorte
+        k=100 N/m, amortiguador b=10 Ns/m, condición inicial theta0=45°
+        (0.785 rad). Nota: el paper reporta k y b como constantes de un
+        sistema masa-resorte-amortiguador, pero las grafica vía el péndulo
+        -- para reusarlas acá simplemente se pasan como coeficientes de la
+        ecuación del péndulo (b/l, no b/m); si en algún momento conseguís
+        los valores de m y l reales del prototipo, esto se puede ajustar a
+        una conversión física exacta en vez de una reutilización directa.
+
+        Devuelve listas (t, theta, theta_dot), con theta en radianes.
+        """
+        theta0_deg = theta0_deg if theta0_deg is not None else self.theta0_deg
+        theta = math.radians(theta0_deg)
+        theta_dot = 0.0
+        t = 0.0
+        ts, thetas, theta_dots = [t], [theta], [theta_dot]
+        n_steps = int(t_max / dt)
+        for _ in range(n_steps):
+            theta_ddot = -(self.b / l) * theta_dot - (g / l) * math.sin(theta)
+            theta_dot += theta_ddot * dt
+            theta += theta_dot * dt
+            t += dt
+            ts.append(t)
+            thetas.append(theta)
+            theta_dots.append(theta_dot)
+        return ts, thetas, theta_dots
+
 
 # ---------------------------------------------------------------------------
 # 3. Handler FreeCAD (hereda de BaseHandler -- sigue tu convención real)
@@ -255,6 +297,50 @@ class FourBarKneeHandler(BaseHandler):
     """
 
     ROLE_KNEE_MECHANISM = getattr(BaseHandler, "ROLE_KNEE_MECHANISM", "knee_mechanism")
+
+    _ALLOWED_OPERATIONS = frozenset({"check_kinematics", "build_knee_mechanism"})
+
+    def check_kinematics(self, params: Dict[str, Any]) -> str:
+        """
+        Valida una geometria candidata de 4 barras SIN crear nada en FreeCAD:
+        condicion de Grashof, angulos resultantes para theta2_deg dado, y un
+        muestreo del recorrido del ICR. Pensado para probar valores (de
+        literatura o medidas de paciente) antes de comprometerse a generar
+        solidos.
+
+        Args:
+            params: r1, r2, r3, r4 (mm), theta2_deg (default 30),
+                    icr_range_deg (opcional, [lo, hi], default [10, 100]),
+                    icr_steps (opcional, default 30)
+
+        Returns:
+            string con el resultado (via log_and_return) o el error.
+        """
+        t0 = time.time()
+        try:
+            linkage = FourBarLinkage(
+                r1=float(params["r1"]), r2=float(params["r2"]),
+                r3=float(params["r3"]), r4=float(params["r4"]),
+            )
+            theta2_deg = float(params.get("theta2_deg", 30.0))
+            theta2, theta4 = linkage.solve_angles(math.radians(theta2_deg))
+            icr_range = params.get("icr_range_deg", [10.0, 100.0])
+            icr_steps = int(params.get("icr_steps", 30))
+            icr = linkage.icr_path(theta2_range_deg=tuple(icr_range), steps=icr_steps)
+
+            result = (
+                f"Grashof={linkage.is_grashof} (recomendado True para movilidad completa). "
+                f"theta2={theta2_deg}deg -> theta4={math.degrees(theta4):.2f}deg. "
+                f"ICR: {len(icr)}/{icr_steps + 1} puntos resueltos en el rango {icr_range}deg "
+                f"(puntos faltantes = posiciones sin solucion real; si son muchos, revisar longitudes)."
+            )
+            return self.log_and_return(
+                "check_kinematics", params, result=result, duration=time.time() - t0
+            )
+        except Exception as e:
+            return self.log_and_return(
+                "check_kinematics", params, error=e, duration=time.time() - t0
+            )
 
     def build_knee_mechanism(self, params: Dict[str, Any]) -> str:
         """
