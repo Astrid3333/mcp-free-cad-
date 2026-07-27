@@ -86,6 +86,32 @@ La mayoría de las operaciones (`part_operations`, `partdesign_operations`,
 está en desarrollo activo — el esquema ya está expuesto pero los handlers
 todavía se están completando.
 
+## Pipeline de prótesis (organic_operations)
+
+Además de las operaciones estándar de FreeCAD, este bridge expone un grupo de
+handlers pensados específicamente para diseño de sockets protésicos y
+mecanismos asociados (geometría orgánica, encaje con el muñón, mecanismos
+articulados). La mayoría todavía se considera en desarrollo activo: el
+esquema ya está expuesto pero conviene validar cada resultado a ojo antes de
+fabricar.
+
+| Handler | Qué hace |
+|---|---|
+| `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva |
+| `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento |
+| `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo |
+| `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados |
+| `tendon_routing_operations` | Planificación de recorrido de tendones: anclajes, radio de curvatura mínimo, chequeo de colisión del cableado con el material sólido |
+| `four_bar_knee_operations` | Síntesis cinemática de rodilla policéntrica de cuatro barras (condición de Grashof, trayectoria del ICR) antes de generar la geometría |
+| `quick_connect_operations` | Conectores rápidos socket↔dispositivo terminal: pares bayoneta o roscados, con retención magnética opcional |
+| `lightweight_operations` | Recomendación de densidad de relleno/lattice guiada por la trayectoria de carga aproximada, para aligerar piezas sin perder resistencia (screening geométrico, no reemplaza un ensayo físico) |
+| `fitting_history_operations` | Bitácora de sesiones de prueba por paciente (identificado solo por código no-PII): snapshot de geometría + notas estructuradas, comparación contra la última sesión |
+
+Todos estos módulos son **screenings geométricos de primer paso**, no
+sustituyen simulación FEA validada ni criterio clínico. `fitting_history_operations`
+requiere que `patient_id` sea siempre un código no identificable (iniciales +
+número), nunca un dato personal real.
+
 ## Troubleshooting
 
 - **"Unknown tool" en alguna operación**: el handler correspondiente no está
@@ -93,3 +119,28 @@ todavía se están completando.
 - **`check_freecad_connection` no encuentra nada**: confirmá que FreeCAD está
   abierto con GUI (no en modo `freecadcmd`) y que el addon cargó sin errores
   (revisá la consola Python de FreeCAD al arrancar).
+## Pipeline de prótesis (organic_operations)
+
+Además de las operaciones estándar de FreeCAD, este bridge expone un grupo de
+handlers pensados específicamente para diseño de sockets protésicos y
+mecanismos asociados (geometría orgánica, encaje con el muñón, mecanismos
+articulados). La mayoría todavía se considera en desarrollo activo: el
+esquema ya está expuesto pero conviene validar cada resultado a ojo antes de
+fabricar.
+
+| Handler | Qué hace |
+|---|---|
+| `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva |
+| `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento |
+| `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo |
+| `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados |
+| `tendon_routing_operations` | Planificación de recorrido de tendones: anclajes, radio de curvatura mínimo, chequeo de colisión del cableado con el material sólido |
+| `four_bar_knee_operations` | Síntesis cinemática de rodilla policéntrica de cuatro barras (condición de Grashof, trayectoria del ICR) antes de generar la geometría |
+| `quick_connect_operations` | Conectores rápidos socket↔dispositivo terminal: pares bayoneta o roscados, con retención magnética opcional |
+| `lightweight_operations` | Recomendación de densidad de relleno/lattice guiada por la trayectoria de carga aproximada, para aligerar piezas sin perder resistencia (screening geométrico, no reemplaza un ensayo físico) |
+| `fitting_history_operations` | Bitácora de sesiones de prueba por paciente (identificado solo por código no-PII): snapshot de geometría + notas estructuradas, comparación contra la última sesión |
+
+Todos estos módulos son **screenings geométricos de primer paso**, no
+sustituyen simulación FEA validada ni criterio clínico. `fitting_history_operations`
+requiere que `patient_id` sea siempre un código no identificable (iniciales +
+número), nunca un dato personal real.
