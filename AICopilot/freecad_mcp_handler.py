@@ -186,6 +186,11 @@ try:
         FittingHistoryOpsHandler,
         LightweightOpsHandler,
         OrganicOpsHandler,
+        MeshRepairOpsHandler,
+        PrintSegmentationOpsHandler,
+        CosmeticShellOpsHandler,
+        FingerSegmentOpsHandler,
+        QuadrupedLimbHandler,
         FourBarKneeHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
@@ -334,6 +339,11 @@ class FreeCADSocketServer:
         self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
         self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
         self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
+        self.mesh_repair_ops = MeshRepairOpsHandler(self, _log_operation, _capture_state)
+        self.print_segmentation_ops = PrintSegmentationOpsHandler(self, _log_operation, _capture_state)
+        self.cosmetic_shell_ops = CosmeticShellOpsHandler(self, _log_operation, _capture_state)
+        self.finger_segment_ops = FingerSegmentOpsHandler(self, _log_operation, _capture_state)
+        self.quadruped_limb_ops = QuadrupedLimbHandler(self, _log_operation, _capture_state)
         self.four_bar_knee_ops = FourBarKneeHandler(self, _log_operation, _capture_state)
         self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
         self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)
@@ -1055,6 +1065,11 @@ class FreeCADSocketServer:
             "fitting_history_operations": self.fitting_history_ops,
             "lightweight_operations": self.lightweight_ops,
             "organic_operations": self.organic_ops,
+            "mesh_repair_operations": self.mesh_repair_ops,
+            "print_segmentation_operations": self.print_segmentation_ops,
+            "cosmetic_shell_operations": self.cosmetic_shell_ops,
+            "finger_segment_operations": self.finger_segment_ops,
+            "quadruped_limb_operations": self.quadruped_limb_ops,
             "four_bar_knee_operations": self.four_bar_knee_ops,
         }
 
@@ -1604,6 +1619,11 @@ class FreeCADSocketServer:
                 FittingHistoryOpsHandler,
                 LightweightOpsHandler,
                 OrganicOpsHandler,
+                MeshRepairOpsHandler,
+                PrintSegmentationOpsHandler,
+                CosmeticShellOpsHandler,
+                FingerSegmentOpsHandler,
+                QuadrupedLimbHandler,
                 FourBarKneeHandler,
             )
 
@@ -1630,6 +1650,11 @@ class FreeCADSocketServer:
             self.compliant_ops = CompliantOpsHandler(self, _log_operation, _capture_state)
             self.tendon_routing_ops = TendonRoutingHandler(self, _log_operation, _capture_state)
             self.organic_ops = OrganicOpsHandler(self, _log_operation, _capture_state)
+            self.mesh_repair_ops = MeshRepairOpsHandler(self, _log_operation, _capture_state)
+            self.print_segmentation_ops = PrintSegmentationOpsHandler(self, _log_operation, _capture_state)
+            self.cosmetic_shell_ops = CosmeticShellOpsHandler(self, _log_operation, _capture_state)
+            self.finger_segment_ops = FingerSegmentOpsHandler(self, _log_operation, _capture_state)
+            self.quadruped_limb_ops = QuadrupedLimbHandler(self, _log_operation, _capture_state)
             self.four_bar_knee_ops = FourBarKneeHandler(self, _log_operation, _capture_state)
             self.contact_pressure_ops = ContactPressureOpsHandler(self, _log_operation, _capture_state)
             self.growth_socket_ops = GrowthSocketOpsHandler(self, _log_operation, _capture_state)

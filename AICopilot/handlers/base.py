@@ -471,6 +471,7 @@ class BaseHandler:
     # the string directly, so a rename only touches this list.
     ROLE_SOCKET = "socket"
     ROLE_KNEE_MECHANISM = "knee_mechanism"
+    ROLE_LIMB_JOINT = "limb_joint"
     ROLE_PYLON = "pylon"
     ROLE_QUICK_CONNECT = "quick_connect"
     ROLE_TERMINAL_DEVICE = "terminal_device"
@@ -531,7 +532,7 @@ class BaseHandler:
         # both before any recompute has been observed to raise "AttachExtension
         # cannot find placement property" against this FreeCAD build/bridge
         # (0.21.2), even though each step works fine in isolation.
-        anchor.Support = [(obj, face_name)]
+        anchor.AttachmentSupport = [(obj, face_name)]
         doc.recompute()
         anchor.MapMode = mode
         doc.recompute()

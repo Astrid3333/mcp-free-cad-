@@ -33,8 +33,14 @@ from .fitting_history_ops import FittingHistoryOpsHandler
 from .lightweight_ops import LightweightOpsHandler
 from .organic_ops import OrganicOpsHandler
 from .four_bar_knee_ops import FourBarKneeHandler
+from .mesh_repair_operations import MeshRepairOpsHandler
+from .print_segmentation_operations import PrintSegmentationOpsHandler
+from .cosmetic_shell_operations import CosmeticShellOpsHandler
+from .finger_segment_operations import FingerSegmentOpsHandler
+from .quadruped_limb_ops import QuadrupedLimbHandler
 
 __all__ = [
+    'QuadrupedLimbHandler',
     'BaseHandler',
     'PrimitivesHandler',
     'BooleanOpsHandler',

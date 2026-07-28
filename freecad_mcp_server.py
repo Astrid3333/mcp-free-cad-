@@ -2252,6 +2252,65 @@ async def main():
                 ),
 
                 types.Tool(
+                    name="quadruped_limb_operations",
+                    description=(
+                        "Veterinary limb prosthesis/orthosis for quadrupeds (canine, feline, "
+                        "equine) -- forelimb or hindlimb, at or above the carpus/stifle/hock. "
+                        "NOT a reuse of four_bar_knee_operations' polycentric synthesis: a "
+                        "quadruped's prosthetic joint is modeled as a single-axis hinge with a "
+                        "ROM (range of motion) stop, matching how these are actually built in "
+                        "veterinary practice, rather than a human four-bar knee mechanism. "
+                        "list_species_presets: read-only, returns default ROM/segment-ratio "
+                        "presets by species+limb. check_joint_rom: dry-run validation of a "
+                        "candidate ROM/link-length set against species defaults, no geometry. "
+                        "suggest_segment_lengths: splits a measured total limb length into "
+                        "proximal/distal segments using species presets (feeds "
+                        "organic_operations.cross_section_stack station spacing). "
+                        "build_limb_joint: creates the hinge (two links + pin proxy) at a given "
+                        "flexion angle and registers the proximal link as the socket-side "
+                        "attachment and the distal link's far face as the output anchor for "
+                        "chaining to a pylon. Species/limb presets are engineering placeholders, "
+                        "not verified clinical ROM data -- confirm with the treating vet before "
+                        "fabricating anything from these defaults."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["list_species_presets", "check_joint_rom",
+                                         "suggest_segment_lengths", "build_limb_joint"],
+                                "description": (
+                                    "list_species_presets/check_joint_rom/suggest_segment_lengths: "
+                                    "dry-run, no FreeCAD geometry. build_limb_joint: creates the "
+                                    "hinge bodies in the active document."
+                                )
+                            },
+                            "species": {
+                                "type": "string", "enum": ["canine", "feline", "equine"], "default": "canine",
+                                "description": "Selects the default ROM/segment-ratio preset. Ignored by list_species_presets."
+                            },
+                            "limb": {
+                                "type": "string", "enum": ["fore", "hind"], "default": "hind",
+                                "description": "Forelimb (carpus-level) or hindlimb (stifle/hock-level). Ignored by list_species_presets."
+                            },
+                            "proximal_len": {"type": "number", "description": "Proximal link length, mm (segment between socket and joint pin)"},
+                            "distal_len": {"type": "number", "description": "Distal link length, mm (segment between joint pin and pylon)"},
+                            "rom_min_deg": {"type": "number", "description": "Optional override of the species/limb preset's minimum flexion, degrees"},
+                            "rom_max_deg": {"type": "number", "description": "Optional override of the species/limb preset's maximum flexion, degrees"},
+                            "flexion_deg": {"type": "number", "description": "Flexion angle to evaluate/build at, degrees (default: midpoint of ROM)"},
+                            "total_limb_length_mm": {"type": "number", "description": "suggest_segment_lengths only: total measured limb length to split, mm"},
+                            "link_width": {"type": "number", "default": 8.0, "description": "build_limb_joint only: link cross-section width, mm (placeholder proxy geometry)"},
+                            "link_thickness": {"type": "number", "default": 5.0, "description": "build_limb_joint only: link cross-section thickness, mm (placeholder proxy geometry)"},
+                            "pin_radius": {"type": "number", "default": 3.0, "description": "build_limb_joint only: joint pin proxy radius, mm"},
+                            "attach_to_socket": {"type": "boolean", "default": True, "description": "build_limb_joint only: try to position at the registered socket output anchor; harmless if none exists yet"},
+                        },
+                        "required": ["operation"]
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
+
+                types.Tool(
                     name="surface_operations",
                     description=(
                         "Surface workbench operations and advanced shell modeling: "
@@ -2767,7 +2826,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection
@@ -3018,7 +3077,7 @@ async def main():
                             )
                         })
                     )]
-                launch_cmd = [freecad_bin, headless_script, "--socket-path", sock_path]
+                launch_cmd = [freecad_bin, headless_script, "--pass", "--socket-path", sock_path]
 
             env = os.environ.copy()
             env["FREECAD_MCP_SOCKET"] = sock_path
