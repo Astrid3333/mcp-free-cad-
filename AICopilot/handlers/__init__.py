@@ -38,9 +38,11 @@ from .print_segmentation_operations import PrintSegmentationOpsHandler
 from .cosmetic_shell_operations import CosmeticShellOpsHandler
 from .finger_segment_operations import FingerSegmentOpsHandler
 from .quadruped_limb_ops import QuadrupedLimbHandler
+from .mesh_repair_operations import MeshRepairOpsHandler
 
 __all__ = [
     'QuadrupedLimbHandler',
+    'MeshRepairOpsHandler',
     'BaseHandler',
     'PrimitivesHandler',
     'BooleanOpsHandler',

@@ -110,6 +110,12 @@ class MeshRepairOpsHandler(BaseHandler):
 
         all_faces = list(shp.Faces) + patch_faces
         shell = Part.Shell(all_faces)
+        # cosido geometrico -- _find_open_wires compara edges por hashCode(), y
+        # Part.Face(w) suele regenerar geometria de edge al construir la cara de
+        # parche, asi que dos edges coincidentes en el espacio pueden tener
+        # hashCode distinto. sewShape() fusiona por coincidencia geometrica
+        # dentro de una tolerancia, no por identidad de hash.
+        shell.sewShape()
         try:
             solid = Part.Solid(shell)
         except Exception:

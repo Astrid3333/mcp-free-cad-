@@ -2311,6 +2311,38 @@ async def main():
                 ),
 
                 types.Tool(
+                    name="mesh_repair_operations",
+                    description=(
+                        "Reparacion de mallas escaneadas (STL/PLY) con huecos -- flujo de "
+                        "digitalizacion por escaner 3D. analyze_mesh_defects: detecta bordes "
+                        "abiertos (huecos) en una malla/solido importado y reporta perimetro, "
+                        "diametro aproximado y centroide de cada hueco. patch_holes: tapa los "
+                        "huecos indicados (o todos) generando caras de parche. method='planar' "
+                        "es mas robusto para huecos casi planos; method='filled' "
+                        "(Part.makeFilledFace) es mejor para huecos no planos pero puede "
+                        "devolver normal invertida -- mismo problema conocido que el trim "
+                        "cutter del socket transradial. Sin probar contra FreeCAD real, revisar "
+                        "el resultado antes de confiar en el."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["analyze_mesh_defects", "patch_holes"],
+                                "description": "analyze_mesh_defects: solo lectura, detecta huecos. patch_holes: crea un nuevo objeto con los huecos parchados."
+                            },
+                            "object_name": {"type": "string", "description": "Nombre del objeto (malla/solido) a analizar o reparar"},
+                            "hole_indices": {"type": "array", "items": {"type": "integer"}, "description": "patch_holes only: indices de huecos a parchar (de analyze_mesh_defects). Si se omite, parcha todos."},
+                            "method": {"type": "string", "enum": ["planar", "filled"], "default": "planar", "description": "patch_holes only: metodo de parcheo -- 'planar' mas robusto para huecos casi planos, 'filled' para huecos no planos (puede invertir normales)"},
+                            "name": {"type": "string", "description": "patch_holes only: nombre del nuevo objeto reparado (default: '{object_name}_repaired')"},
+                        },
+                        "required": ["operation", "object_name"]
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
+
+                types.Tool(
                     name="surface_operations",
                     description=(
                         "Surface workbench operations and advanced shell modeling: "
@@ -2826,7 +2858,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection
