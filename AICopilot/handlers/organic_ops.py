@@ -211,7 +211,7 @@ class OrganicOpsHandler(BaseHandler):
 
     _ALLOWED_OPERATIONS = frozenset({
         "cross_section_stack", "organic_loft", "skin_solid", "offset_surface",
-        "organic_sweep", "section_profiles",
+        "organic_sweep", "section_profiles", "hollow_cross_section_stack",
     })
 
     # ------------------------------------------------------------------
@@ -288,6 +288,171 @@ class OrganicOpsHandler(BaseHandler):
         except Exception as e:
             return json.dumps({"ok": False, "details": {},
                                 "message": f"Error in cross_section_stack: {e}"})
+
+    # ------------------------------------------------------------------
+    def hollow_cross_section_stack(self, args: Dict[str, Any]) -> str:
+        """Build a hollow anatomical shell (e.g. a prosthetic socket wall) in
+        one call, by lofting an OUTER and an INNER stack of cross-sections
+        and subtracting inner from outer. This is the boolean-based
+        replacement for the old offset_surface + face_index approach: a
+        smooth (non-ruled) loft in OCC produces a single continuous lateral
+        face, so there is no "face of section N" to apply a per-station
+        offset to after the fact. Instead, wall thickness must already be
+        baked into the INNER profile's width/height before this is called
+        (see munon_a_secciones.py: construir_secciones() does exactly this,
+        contracting ap/ml per section by 2x the landmark's wall thickness).
+
+        This does NOT compute thickness for you — sections_inner must
+        already be the correctly-shrunk profiles. This method only
+        orchestrates: loft outer, loft inner, cut.
+
+        Args:
+          doc_name:       FreeCAD document name
+          sections_outer: list of section dicts (see cross_section_stack) —
+                           the real/measured outer profile.
+          sections_inner: list of section dicts, same length/order as
+                           sections_outer, already shrunk by wall thickness.
+          axis:           "x" | "y" | "z" — same for both stacks
+          ruled:           same as cross_section_stack (applies to both lofts)
+          closed_loft:     same as cross_section_stack (applies to both lofts)
+          outer_name:      name for the outer loft solid (default "Socket_Outer")
+          inner_name:      name for the inner loft solid (default "Socket_Inner")
+          wall_name:       name for the final cut (hollow wall) solid (default "Socket_Wall")
+          keep_outer_visible: if True (default), re-show Socket_Outer after the
+                           cut so it stays available as a proxy of the real limb
+                           for a later contact_pressure_operations QA pass —
+                           cut_objects hides source objects by default.
+
+        Returns JSON with the created wall solid's name, or an error at
+        whichever stage failed (outer loft / inner loft / cut) so you know
+        which one to look at.
+        """
+        try:
+            doc_name = args.get("doc_name")
+            doc = FreeCAD.getDocument(doc_name) if doc_name else self.get_document()
+            if not doc:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": f"No document found (doc_name={doc_name!r})"})
+
+            sections_outer = args.get("sections_outer") or []
+            sections_inner = args.get("sections_inner") or []
+            if len(sections_outer) < 2 or len(sections_inner) < 2:
+                return json.dumps({"ok": False, "details": {},
+                                    "message": "sections_outer and sections_inner must each have at least 2 entries"})
+            if len(sections_outer) != len(sections_inner):
+                return json.dumps({"ok": False, "details": {
+                                        "outer_count": len(sections_outer),
+                                        "inner_count": len(sections_inner)},
+                                    "message": "sections_outer and sections_inner must have the same length "
+                                               "(one inner profile per outer section) -- mismatched counts usually "
+                                               "mean a section was dropped upstream (e.g. ESPESOR_MINIMO_MM raised "
+                                               "in construir_secciones before it got here)."})
+
+            axis = str(args.get("axis", "z"))
+            ruled = bool(args.get("ruled", False))
+            closed_loft = bool(args.get("closed_loft", False))
+            outer_name = args.get("outer_name") or "Socket_Outer"
+            inner_name = args.get("inner_name") or "Socket_Inner"
+            wall_name = args.get("wall_name") or "Socket_Wall"
+            keep_outer_visible = args.get("keep_outer_visible", True)
+
+            # Extend the inner stack a few mm past the outer's first/last
+            # position so the cut fully penetrates at both ends. Without
+            # this, inner's end caps sit in the exact same plane as outer's
+            # end caps -- a coincident-face degenerate boolean input that
+            # produces a broken/non-watertight wall (confirmed via
+            # distToShape: contact points land exactly at the two end
+            # planes, not a mid-height crossing). The margin sections reuse
+            # the nearest real inner section's shape/dims verbatim; they
+            # exist only to punch through cleanly, not to represent real
+            # anatomy there. Skipped for closed_loft, which has no flat end
+            # caps to begin with.
+            sections_inner_for_loft = sections_inner
+            if not closed_loft:
+                END_MARGIN_MM = 3.0
+                positions_outer = [float(s.get("position", 0.0)) for s in sections_outer]
+                outer_lo, outer_hi = min(positions_outer), max(positions_outer)
+
+                inner_sorted = sorted(sections_inner, key=lambda s: float(s.get("position", 0.0)))
+                margin_lo = dict(inner_sorted[0])
+                margin_lo["position"] = outer_lo - END_MARGIN_MM
+                margin_hi = dict(inner_sorted[-1])
+                margin_hi["position"] = outer_hi + END_MARGIN_MM
+
+                sections_inner_for_loft = [margin_lo] + sections_inner + [margin_hi]
+
+            outer_result_raw = self.cross_section_stack({
+                "doc_name": doc_name, "sections": sections_outer, "axis": axis,
+                "name": outer_name, "ruled": ruled, "closed_loft": closed_loft,
+            })
+            outer_result = json.loads(outer_result_raw)
+            if not outer_result.get("ok"):
+                return json.dumps({"ok": False, "details": {"stage": "outer_loft", "result": outer_result},
+                                    "message": f"Outer loft failed: {outer_result.get('message')}"})
+
+            inner_result_raw = self.cross_section_stack({
+                "doc_name": doc_name, "sections": sections_inner_for_loft, "axis": axis,
+                "name": inner_name, "ruled": ruled, "closed_loft": closed_loft,
+            })
+            inner_result = json.loads(inner_result_raw)
+            if not inner_result.get("ok"):
+                return json.dumps({"ok": False, "details": {"stage": "inner_loft", "result": inner_result},
+                                    "message": f"Inner loft failed: {inner_result.get('message')}. "
+                                               f"Outer loft '{outer_name}' was already created and left in the "
+                                               f"document -- check it for a plausible cause (e.g. an inner "
+                                               f"profile degenerate/self-intersecting)."})
+
+            if self.server is None or not hasattr(self.server, "boolean_ops"):
+                return json.dumps({"ok": False, "details": {"stage": "cut",
+                                        "outer_name": outer_name, "inner_name": inner_name},
+                                    "message": "No boolean_ops handler available on self.server -- "
+                                               "both lofts were created ("
+                                               f"{outer_name}, {inner_name}) but the cut step could not run. "
+                                               "Run boolean_operations -> cut_objects manually with "
+                                               f"base={outer_name!r}, tools=[{inner_name!r}]."})
+
+            cut_result = self.server.boolean_ops.cut_objects({
+                "base": outer_name, "tools": [inner_name], "name": wall_name,
+            })
+            # cut_objects (boolean_ops.py) returns a plain string, not JSON --
+            # both success and error paths are prose, so check for the known
+            # failure prefixes rather than trying to parse it as JSON.
+            cut_failed = (
+                cut_result.startswith("Error")
+                or cut_result.startswith("Need ")
+                or "not found" in cut_result
+                or "empty/invalid shape" in cut_result
+            )
+            if cut_failed:
+                return json.dumps({"ok": False, "details": {"stage": "cut", "cut_result": cut_result,
+                                        "outer_name": outer_name, "inner_name": inner_name},
+                                    "message": f"Cut failed: {cut_result}. Both lofts were created "
+                                               f"({outer_name}, {inner_name}) -- inspect them for a degenerate "
+                                               f"or self-intersecting inner profile before retrying the cut."})
+
+            if keep_outer_visible:
+                outer_obj = self.get_object(outer_name, doc)
+                if outer_obj is not None:
+                    outer_obj.Visibility = True
+
+            return json.dumps({
+                "ok": True,
+                "details": {"outer_name": outer_name, "inner_name": inner_name, "wall_name": wall_name,
+                             "section_count": len(sections_outer), "axis": axis, "ruled": ruled,
+                             "outer_kept_visible": bool(keep_outer_visible)},
+                "message": (
+                    f"Created hollow wall '{wall_name}' = {outer_name} cut {inner_name}, from "
+                    f"{len(sections_outer)} paired outer/inner cross-sections along {axis}-axis. "
+                    f"Wall thickness came entirely from the inner profile shrink baked in upstream -- "
+                    f"this method did not compute or validate thickness itself. This is a geometric "
+                    f"proxy, not a scanned/clinical fit -- validate against the actual limb model, "
+                    f"and consider contact_pressure_operations against '{outer_name}' as a QA pass "
+                    f"before fabrication."
+                ),
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {},
+                                "message": f"Error in hollow_cross_section_stack: {e}"})
 
     # ------------------------------------------------------------------
     def organic_loft(self, args: Dict[str, Any]) -> str:
