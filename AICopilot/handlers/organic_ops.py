@@ -356,6 +356,20 @@ class OrganicOpsHandler(BaseHandler):
             wall_name = args.get("wall_name") or "Socket_Wall"
             keep_outer_visible = args.get("keep_outer_visible", True)
 
+            # Sort both stacks by position BEFORE anything else touches them.
+            # cross_section_stack/makeLoft connects wires in list order, not
+            # spatial order -- if the caller passes sections descending
+            # (e.g. distal-to-proximal measurement order, which is common
+            # and perfectly valid), leaving them unsorted here produces a
+            # non-monotonic position sequence once the end-margin sections
+            # get spliced in below (margins are derived from the sorted
+            # extremes but were being inserted around the *unsorted* list),
+            # which folds the loft back on itself at both ends instead of
+            # producing a clean tube. Sorting outer the same way keeps it
+            # paired correctly with inner for the later cut.
+            sections_outer = sorted(sections_outer, key=lambda s: float(s.get("position", 0.0)))
+            sections_inner = sorted(sections_inner, key=lambda s: float(s.get("position", 0.0)))
+
             # Extend the inner stack a few mm past the outer's first/last
             # position so the cut fully penetrates at both ends. Without
             # this, inner's end caps sit in the exact same plane as outer's
@@ -373,10 +387,12 @@ class OrganicOpsHandler(BaseHandler):
                 positions_outer = [float(s.get("position", 0.0)) for s in sections_outer]
                 outer_lo, outer_hi = min(positions_outer), max(positions_outer)
 
-                inner_sorted = sorted(sections_inner, key=lambda s: float(s.get("position", 0.0)))
-                margin_lo = dict(inner_sorted[0])
+                # sections_inner is already sorted ascending by position at
+                # this point, so its first/last entries ARE the extremes --
+                # safe to splice margins directly onto it without re-sorting.
+                margin_lo = dict(sections_inner[0])
                 margin_lo["position"] = outer_lo - END_MARGIN_MM
-                margin_hi = dict(inner_sorted[-1])
+                margin_hi = dict(sections_inner[-1])
                 margin_hi["position"] = outer_hi + END_MARGIN_MM
 
                 sections_inner_for_loft = [margin_lo] + sections_inner + [margin_hi]
