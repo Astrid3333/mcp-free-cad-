@@ -203,6 +203,103 @@ def _place_section(wire: "Part.Wire", axis: str, position: float, twist_deg: flo
     return wire
 
 
+def _perp_vector(t: "FreeCAD.Vector") -> "FreeCAD.Vector":
+    """Return a unit vector perpendicular to t, used as the initial
+    reference frame for _rotation_minimizing_frames. The choice here only
+    sets an arbitrary zero-twist offset (any perpendicular works equally
+    well for the RMF propagation) -- it just needs to not be parallel to
+    t and to fail gracefully for any t orientation."""
+    ref = FreeCAD.Vector(0, 0, 1) if abs(t.z) < 0.9 else FreeCAD.Vector(1, 0, 0)
+    perp = ref - t * ref.dot(t)
+    if perp.Length < 1e-9:
+        ref = FreeCAD.Vector(0, 1, 0)
+        perp = ref - t * ref.dot(t)
+    perp.normalize()
+    return perp
+
+
+def _rotation_minimizing_frames(points: List["FreeCAD.Vector"],
+                                 tangents: List["FreeCAD.Vector"]) -> List["FreeCAD.Vector"]:
+    """Propagate a Rotation-Minimizing Frame (RMF) along a sequence of
+    (point, tangent) samples using the double reflection method (Wang,
+    Juttler, Zheng & Liu, "Computation of Rotation Minimizing Frames",
+    ACM TOG 2008). Returns, for each sample, a unit "reference" vector
+    perpendicular to that sample's tangent.
+
+    Why this instead of Rotation(z_axis, tangent) per-point: computing an
+    independent minimal rotation at each point does NOT track how much the
+    frame has already rotated at previous points, so the in-plane "roll"
+    of consecutive sections can jump unpredictably as the tangent varies
+    -- most visibly across inflections or near-straight stretches. Frenet
+    frames have the same class of problem in the opposite direction: they
+    track curvature exactly but are undefined/unstable wherever curvature
+    drops to ~0 (straight segments), flipping the normal by 180 degrees
+    when the curve passes through an inflection.
+
+    The double reflection method avoids both failure modes: it has no
+    dependency on curvature at all (works on straight segments), and it
+    minimizes accumulated twist step-to-step by construction, giving a
+    frame that only rotates as much as the tangent's direction change
+    forces it to -- no extra unnecessary roll, and no discontinuities.
+
+    The only remaining degree of freedom is the *initial* reference vector
+    (an arbitrary zero-twist offset) -- see _perp_vector.
+    """
+    n = len(points)
+    if n == 0:
+        return []
+    refs: List["FreeCAD.Vector"] = [None] * n
+    refs[0] = _perp_vector(tangents[0])
+
+    for i in range(1, n):
+        p0, p1 = points[i - 1], points[i]
+        t0, t1 = tangents[i - 1], tangents[i]
+        r0 = refs[i - 1]
+
+        v1 = p1 - p0
+        c1 = v1.dot(v1)
+        if c1 < 1e-12:
+            # Coincident/near-coincident sample points (degenerate
+            # spacing) -- nothing to reflect against, carry the frame
+            # forward unchanged rather than dividing by ~0.
+            refs[i] = r0
+            continue
+
+        r_l = r0 - v1 * (2.0 / c1 * v1.dot(r0))
+        t_l = t0 - v1 * (2.0 / c1 * v1.dot(t0))
+
+        v2 = t1 - t_l
+        c2 = v2.dot(v2)
+        r1 = r_l if c2 < 1e-12 else r_l - v2 * (2.0 / c2 * v2.dot(r_l))
+
+        # Re-orthonormalize against t1 defensively: the double reflection
+        # method is exact in infinite precision, but floating point drift
+        # over many steps can leave r1 very slightly off-perpendicular.
+        r1 = r1 - t1 * r1.dot(t1)
+        if r1.Length < 1e-9:
+            r1 = _perp_vector(t1)
+        else:
+            r1.normalize()
+        refs[i] = r1
+
+    return refs
+
+
+def _frame_rotation(reference: "FreeCAD.Vector", tangent: "FreeCAD.Vector") -> "FreeCAD.Rotation":
+    """Build the FreeCAD.Rotation that carries a section wire (built flat
+    in local XY, normal +Z) so its local X axis lands on `reference` and
+    its local Z axis (normal) lands on `tangent`, given an RMF-propagated
+    `reference` that is already perpendicular to `tangent`."""
+    binormal = tangent.cross(reference)
+    m = FreeCAD.Matrix(
+        reference.x, binormal.x, tangent.x, 0,
+        reference.y, binormal.y, tangent.y, 0,
+        reference.z, binormal.z, tangent.z, 0,
+        0, 0, 0, 1,
+    )
+    return FreeCAD.Rotation(m)
+
+
 class OrganicOpsHandler(BaseHandler):
     """Freeform / organic solid modeling for forms rigid primitives can't
     express: prosthetic sockets, anatomical cross-sections, biomorphic
@@ -740,8 +837,17 @@ class OrganicOpsHandler(BaseHandler):
                 proto_wire = _section_wire(shape_kind, width, height, corner_radius, args.get("points"))
 
             name_prefix = args.get("name") or "Section"
-            created: List[str] = []
-            z_axis = FreeCAD.Vector(0, 0, 1)
+
+            # Pass 1: sample point + tangent at each arc-length station.
+            # Frame orientation is deliberately NOT computed here -- doing
+            # it point-by-point (e.g. a per-point Rotation(z_axis, tangent))
+            # has no memory of previous sections' orientation, so the
+            # in-plane roll can jump unpredictably between consecutive
+            # sections on a curving spine. Collecting all points/tangents
+            # first lets pass 2 propagate a proper Rotation-Minimizing
+            # Frame across the whole sequence instead.
+            points: List["FreeCAD.Vector"] = []
+            tangents: List["FreeCAD.Vector"] = []
             for i in range(n_sections):
                 dist = (total_length * i) / (n_sections - 1)
                 try:
@@ -762,15 +868,21 @@ class OrganicOpsHandler(BaseHandler):
                     tangent = FreeCAD.Vector(0, 0, 1)
                 tangent.normalize()
 
+                points.append(point)
+                tangents.append(tangent)
+
+            # Pass 2: propagate a Rotation-Minimizing Frame across all
+            # sampled stations (double reflection method -- see
+            # _rotation_minimizing_frames docstring for why this replaces
+            # both the old per-point minimal rotation and a naive Frenet
+            # frame).
+            references = _rotation_minimizing_frames(points, tangents)
+
+            created: List[str] = []
+            for i in range(n_sections):
                 wire = proto_wire.copy()
-                # proto_wire is flat in local XY with normal +Z; rotate so
-                # that normal aligns with the spine tangent at this point.
-                if tangent.cross(z_axis).Length < 1e-9:
-                    rot = (FreeCAD.Rotation() if tangent.z > 0
-                           else FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), 180))
-                else:
-                    rot = FreeCAD.Rotation(z_axis, tangent)
-                wire.Placement = FreeCAD.Placement(point, rot)
+                rot = _frame_rotation(references[i], tangents[i])
+                wire.Placement = FreeCAD.Placement(points[i], rot)
 
                 obj_name = f"{name_prefix}_{i}"
                 feature = doc.addObject("Part::Feature", obj_name)
