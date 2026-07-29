@@ -2087,6 +2087,7 @@ async def main():
                                     # Utilities
                                     "section_profiles", "offset_surface", "blend_surface",
                                     "point_cloud_surface", "cross_section_stack",
+                                    "hollow_cross_section_stack",
                                 ],
                                 "description": (
                                     "bspline_curve: open or closed B-spline through control points. "
@@ -2105,7 +2106,14 @@ async def main():
                                     "blend_surface: G2 blend between two existing surfaces/faces. "
                                     "point_cloud_surface: fit a NURBS surface to a list of 3D points. "
                                     "cross_section_stack: build a parametric solid from a list of 2D cross-section "
-                                    "  measurements (e.g. circumferences along an axis) — ideal for anatomical forms."
+                                    "  measurements (e.g. circumferences along an axis) — ideal for anatomical forms. "
+                                    "hollow_cross_section_stack: build a hollow anatomical shell (e.g. a prosthetic "
+                                    "  socket wall) in one call by lofting sections_outer and sections_inner "
+                                    "  separately and cutting inner from outer — replaces the old offset_surface + "
+                                    "  offset_map (face_index) approach, which cannot survive a smooth loft's single "
+                                    "  continuous lateral face. Wall thickness must already be baked into "
+                                    "  sections_inner (real profile shrunk per-landmark) before calling this — it "
+                                    "  only orchestrates outer loft + inner loft + cut, it does not compute thickness."
                                 )
                             },
                             "doc_name": {"type": "string", "description": "FreeCAD document name"},
@@ -2181,6 +2189,25 @@ async def main():
                                     " {\"position\": 120, \"shape\": \"rounded_rect\", \"width\": 60, \"height\": 45, \"corner_radius\": 12},\n"
                                     " {\"position\": 200, \"shape\": \"circle\", \"width\": 40, \"height\": 40}]"
                                 )
+                            },
+                            "sections_outer": {
+                                "type": "array",
+                                "description": "For hollow_cross_section_stack: outer (real/measured) profile sections. Same format as 'sections'."
+                            },
+                            "sections_inner": {
+                                "type": "array",
+                                "description": (
+                                    "For hollow_cross_section_stack: inner profile sections, same length/order as "
+                                    "sections_outer, ALREADY shrunk by wall thickness at each landmark (this is not "
+                                    "computed here — pass pre-shrunk width/height)."
+                                )
+                            },
+                            "outer_name": {"type": "string", "default": "Socket_Outer", "description": "hollow_cross_section_stack only: name for the outer loft solid"},
+                            "inner_name": {"type": "string", "default": "Socket_Inner", "description": "hollow_cross_section_stack only: name for the inner loft solid"},
+                            "wall_name": {"type": "string", "default": "Socket_Wall", "description": "hollow_cross_section_stack only: name for the final cut (hollow wall) solid"},
+                            "keep_outer_visible": {
+                                "type": "boolean", "default": True,
+                                "description": "hollow_cross_section_stack only: re-show outer_name after the cut (cut_objects hides sources by default) so it stays available as a limb proxy for contact_pressure_operations QA"
                             },
 
                             # ── Offset / blend ─────────────────────────────
