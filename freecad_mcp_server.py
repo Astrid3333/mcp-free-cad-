@@ -2683,6 +2683,48 @@ async def main():
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
                 ),
+
+                types.Tool(
+                    name="materials_operations",
+                    description=(
+                        "Material property reference database, non-destructive multi-material "
+                        "zone tagging on existing solids, and pressure-sensor-data-driven infill "
+                        "density recommendations. NOT an FEA solver -- properties come from "
+                        "published datasheets/literature (see 'source' field per material). "
+                        "list_materials / get_material: query the reference DB. "
+                        "tag_material_zone: tag faces of an existing solid with a material name "
+                        "(stored as a JSON property, doesn't alter geometry). "
+                        "read_material_zones: read back tagged zones joined with material "
+                        "properties and per-face area. "
+                        "recommend_density_from_pressure_map: convert real measured pressure "
+                        "readings (kPa) into per-point infill density/pattern recommendations."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "list_materials", "get_material",
+                                "tag_material_zone", "read_material_zones",
+                                "recommend_density_from_pressure_map"]},
+                            "category": {"type": "string",
+                                         "description": "list_materials only: optional filter, e.g. 'thermoplastic_fdm', 'flexible_zone', 'metal_insert'"},
+                            "name": {"type": "string",
+                                     "description": "get_material only: material key, e.g. 'carbon_fiber_nylon'"},
+                            "shape": {"type": "string",
+                                      "description": "tag_material_zone / read_material_zones: object name"},
+                            "face_indices": {"type": "array", "items": {"type": "integer"},
+                                              "description": "tag_material_zone only: 1-based face indices to tag"},
+                            "material": {"type": "string",
+                                         "description": "tag_material_zone only: material name from the reference DB (arbitrary strings allowed, flagged in response if unknown)"},
+                            "readings": {"type": "array", "items": {"type": "object"},
+                                         "description": "recommend_density_from_pressure_map only: list of {point_mm:[x,y,z], pressure_kpa:float}"},
+                            "max_expected_kpa": {"type": "number", "default": 80.0,
+                                                  "description": "recommend_density_from_pressure_map only: pressure value mapped to the top density band"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
             ]
             return base_tools + smart_dispatchers
 
@@ -2885,7 +2927,11 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
+<<<<<<< HEAD
                       "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations"]:
+=======
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "materials_operations"]:
+>>>>>>> e85994d (Add materials_operations: material property reference DB, zone tagging, pressure-map density recommendations)
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection

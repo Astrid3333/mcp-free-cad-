@@ -192,6 +192,7 @@ try:
         FingerSegmentOpsHandler,
         QuadrupedLimbHandler,
         FourBarKneeHandler,
+        MaterialsOpsHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -350,6 +351,7 @@ class FreeCADSocketServer:
         self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
         self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
         self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
+        self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
         self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
         # GUI-sensitive handlers get the task queues for thread safety
         self.view_ops = ViewOpsHandler(
@@ -1625,6 +1627,7 @@ class FreeCADSocketServer:
                 FingerSegmentOpsHandler,
                 QuadrupedLimbHandler,
                 FourBarKneeHandler,
+                MaterialsOpsHandler,
             )
 
             # Re-create handler instances
@@ -1661,6 +1664,7 @@ class FreeCADSocketServer:
             self.quick_connect_ops = QuickConnectOpsHandler(self, _log_operation, _capture_state)
             self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
             self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
+            self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
             self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
             self.view_ops = ViewOpsHandler(
                 self, self._gui_task_queue, self._gui_response_queue,

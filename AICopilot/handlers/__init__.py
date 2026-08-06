@@ -38,7 +38,7 @@ from .print_segmentation_operations import PrintSegmentationOpsHandler
 from .cosmetic_shell_operations import CosmeticShellOpsHandler
 from .finger_segment_operations import FingerSegmentOpsHandler
 from .quadruped_limb_ops import QuadrupedLimbHandler
-from .mesh_repair_operations import MeshRepairOpsHandler
+from .materials_ops import MaterialsOpsHandler
 
 __all__ = [
     'QuadrupedLimbHandler',
@@ -73,4 +73,5 @@ __all__ = [
     'QuickConnectOpsHandler',
     'FittingHistoryOpsHandler',
     'LightweightOpsHandler',
+    'MaterialsOpsHandler',
 ]
