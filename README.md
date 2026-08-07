@@ -83,29 +83,34 @@ La mayoría de las operaciones (`part_operations`, `partdesign_operations`,
 `spatial_query`, `execute_python`) están implementadas y probadas.
 
 `organic_operations` (B-splines, NURBS, organic loft/sweep, cross-section stacks)
-está en desarrollo activo — el esquema ya está expuesto pero los handlers
-todavía se están completando.
+tiene el core geométrico validado contra una instancia FreeCAD real (incluye
+un fix de torsión espuria vía rotation-minimizing frame). Sigue siendo
+screening geométrico, no reemplaza una simulación FEA validada.
 
 ## Pipeline de prótesis (organic_operations)
 
 Además de las operaciones estándar de FreeCAD, este bridge expone un grupo de
 handlers pensados específicamente para diseño de sockets protésicos y
 mecanismos asociados (geometría orgánica, encaje con el muñón, mecanismos
-articulados). La mayoría todavía se considera en desarrollo activo: el
-esquema ya está expuesto pero conviene validar cada resultado a ojo antes de
-fabricar.
+articulados).
 
-| Handler | Qué hace |
-|---|---|
-| `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva |
-| `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento |
-| `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo |
-| `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados |
-| `tendon_routing_operations` | Planificación de recorrido de tendones: anclajes, radio de curvatura mínimo, chequeo de colisión del cableado con el material sólido |
-| `four_bar_knee_operations` | Síntesis cinemática de rodilla policéntrica de cuatro barras (condición de Grashof, trayectoria del ICR) antes de generar la geometría |
-| `quick_connect_operations` | Conectores rápidos socket↔dispositivo terminal: pares bayoneta o roscados, con retención magnética opcional |
-| `lightweight_operations` | Recomendación de densidad de relleno/lattice guiada por la trayectoria de carga aproximada, para aligerar piezas sin perder resistencia (screening geométrico, no reemplaza un ensayo físico) |
-| `fitting_history_operations` | Bitácora de sesiones de prueba por paciente (identificado solo por código no-PII): snapshot de geometría + notas estructuradas, comparación contra la última sesión |
+| Handler | Qué hace | Estado |
+|---|---|---|
+| `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva | Core validado en vivo |
+| `mesh_repair_operations` | Detección y parcheo de huecos en mallas escaneadas (STL/PLY) | Wireado y validado |
+| `print_segmentation_operations` | Segmentación de piezas para impresión 3D | Wireado |
+| `cosmetic_shell_operations` | Shells cosméticos (cobertura externa no estructural) | Wireado |
+| `finger_segment_operations` | Cadena de falanges protésicas + `create_stump_socket` (interfaz mecánica con el muñón residual) | Wireado y extendido |
+| `quadruped_limb_operations` | Prótesis/ortesis de miembro para cuadrúpedos (perro/gato/equino) — bisagra single-axis con ROM por especie | Wireado |
+| `materials_operations` | Base de datos de propiedades de materiales, tagging de zonas por cara, recomendación de densidad desde mapa de presión | Wireado y validado end-to-end |
+| `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento | En desarrollo activo — validar a ojo |
+| `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo | En desarrollo activo — validar a ojo |
+| `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados | En desarrollo activo — validar a ojo |
+| `tendon_routing_operations` | Planificación de recorrido de tendones: anclajes, radio de curvatura mínimo, chequeo de colisión del cableado con el material sólido | En desarrollo activo — validar a ojo |
+| `four_bar_knee_operations` | Síntesis cinemática de rodilla policéntrica de cuatro barras (condición de Grashof, trayectoria del ICR) antes de generar la geometría | En desarrollo activo — validar a ojo |
+| `quick_connect_operations` | Conectores rápidos socket↔dispositivo terminal: pares bayoneta o roscados, con retención magnética opcional | En desarrollo activo — validar a ojo |
+| `lightweight_operations` | Recomendación de densidad de relleno/lattice guiada por la trayectoria de carga aproximada, para aligerar piezas sin perder resistencia (screening geométrico, no reemplaza un ensayo físico) | En desarrollo activo — validar a ojo |
+| `fitting_history_operations` | Bitácora de sesiones de prueba por paciente (identificado solo por código no-PII): snapshot de geometría + notas estructuradas, comparación contra la última sesión | En desarrollo activo — validar a ojo |
 
 Todos estos módulos son **screenings geométricos de primer paso**, no
 sustituyen simulación FEA validada ni criterio clínico. `fitting_history_operations`
@@ -119,28 +124,4 @@ número), nunca un dato personal real.
 - **`check_freecad_connection` no encuentra nada**: confirmá que FreeCAD está
   abierto con GUI (no en modo `freecadcmd`) y que el addon cargó sin errores
   (revisá la consola Python de FreeCAD al arrancar).
-## Pipeline de prótesis (organic_operations)
 
-Además de las operaciones estándar de FreeCAD, este bridge expone un grupo de
-handlers pensados específicamente para diseño de sockets protésicos y
-mecanismos asociados (geometría orgánica, encaje con el muñón, mecanismos
-articulados). La mayoría todavía se considera en desarrollo activo: el
-esquema ya está expuesto pero conviene validar cada resultado a ojo antes de
-fabricar.
-
-| Handler | Qué hace |
-|---|---|
-| `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva |
-| `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento |
-| `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo |
-| `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados |
-| `tendon_routing_operations` | Planificación de recorrido de tendones: anclajes, radio de curvatura mínimo, chequeo de colisión del cableado con el material sólido |
-| `four_bar_knee_operations` | Síntesis cinemática de rodilla policéntrica de cuatro barras (condición de Grashof, trayectoria del ICR) antes de generar la geometría |
-| `quick_connect_operations` | Conectores rápidos socket↔dispositivo terminal: pares bayoneta o roscados, con retención magnética opcional |
-| `lightweight_operations` | Recomendación de densidad de relleno/lattice guiada por la trayectoria de carga aproximada, para aligerar piezas sin perder resistencia (screening geométrico, no reemplaza un ensayo físico) |
-| `fitting_history_operations` | Bitácora de sesiones de prueba por paciente (identificado solo por código no-PII): snapshot de geometría + notas estructuradas, comparación contra la última sesión |
-
-Todos estos módulos son **screenings geométricos de primer paso**, no
-sustituyen simulación FEA validada ni criterio clínico. `fitting_history_operations`
-requiere que `patient_id` sea siempre un código no identificable (iniciales +
-número), nunca un dato personal real.
