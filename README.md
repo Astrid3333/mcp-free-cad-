@@ -107,7 +107,7 @@ articulados).
 | Handler | Qué hace | Estado |
 |---|---|---|
 | `organic_operations` | Loft/sweep orgánico, stacks de secciones transversales (`cross_section_stack`), perfiles circulares/elípticos/poligonales/spline, `organic_sweep` a lo largo de una curva | Core validado en vivo |
-| `mesh_repair_operations` | Detección y parcheo de huecos en mallas escaneadas (STL/PLY) | Wireado y validado |
+| `mesh_repair_operations` | Detección y parcheo de huecos en mallas escaneadas (STL/PLY) | Validado end-to-end contra Mesh::Feature real (fix: no funcionaba con mallas importadas antes de esta sesión) |
 | `print_segmentation_operations` | Segmentación de piezas para impresión 3D | Wireado |
 | `cosmetic_shell_operations` | Shells cosméticos (cobertura externa no estructural) | Wireado |
 | `finger_segment_operations` | Cadena de falanges protésicas + `create_stump_socket` (interfaz mecánica con el muñón residual) | Wireado y extendido |
