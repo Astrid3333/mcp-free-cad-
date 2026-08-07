@@ -29,7 +29,7 @@ from .base import BaseHandler
 # (model.shape_validity, model.zero_or_negative_volume, model.degenerate_bbox
 # + reglas laser/resin/cnc_3axis), NO el paquete FC-tools completo externo.
 _INTREE_INSPECTOR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'inspector')
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', 'inspector')
 )
 
 _FALLBACK_PATHS = [
