@@ -2314,7 +2314,7 @@ async def main():
                                 )
                             },
                             "species": {
-                                "type": "string", "enum": ["canine", "feline", "equine"], "default": "canine",
+                                "type": "string", "enum": ["canine", "feline", "equine", "rabbit", "avian"], "default": "canine",
                                 "description": "Selects the default ROM/segment-ratio preset. Ignored by list_species_presets."
                             },
                             "limb": {
