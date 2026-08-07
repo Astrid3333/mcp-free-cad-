@@ -111,8 +111,9 @@ articulados).
 | `print_segmentation_operations` | Segmentación de piezas para impresión 3D | Wireado |
 | `cosmetic_shell_operations` | Shells cosméticos (cobertura externa no estructural) | Wireado |
 | `finger_segment_operations` | Cadena de falanges protésicas + `create_stump_socket` (interfaz mecánica con el muñón residual) | Wireado y extendido |
-| `quadruped_limb_operations` | Prótesis/ortesis de miembro para cuadrúpedos (perro/gato/equino) — bisagra single-axis con ROM por especie | Wireado |
+| `quadruped_limb_operations` | Prótesis/ortesis de miembro para cuadrúpedos (perro/gato/equino/conejo/ave) — bisagra single-axis con ROM por especie | Wireado y validado en vivo (incl. rabbit/avian) |
 | `materials_operations` | Base de datos de propiedades de materiales, tagging de zonas por cara, recomendación de densidad desde mapa de presión | Wireado y validado end-to-end |
+| `harness_attachment_operations` | Colocación de puntos de anclaje para correas/arneses (D-ring, slot, buckle post) y screening de clearance en línea recta entre anclajes | Wireado y validado en vivo (anchors + clearance check) |
 | `growth_socket_operations` | Sockets telescópicos/anidados para uso pediátrico: shell exterior + familia de liners de distintos tamaños para acompañar el crecimiento | En desarrollo activo — validar a ojo |
 | `contact_pressure_operations` | Screening geométrico (NO es FEA) del ajuste socket–muñón: muestreo de holgura sobre la superficie interna y agrupamiento en zonas de riesgo | En desarrollo activo — validar a ojo |
 | `compliant_operations` | Bisagras vivas / juntas compliant para mecanismos flexibles (dedos segmentados, etc.), con recomendación de espesor derivado de material y ciclos esperados | En desarrollo activo — validar a ojo |
