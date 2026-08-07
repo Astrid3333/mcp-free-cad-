@@ -109,6 +109,11 @@ class MaterialsOpsHandler(BaseHandler):
     existing solids, and pressure-sensor-driven infill density recommendations.
     """
 
+    _ALLOWED_OPERATIONS = frozenset({
+        "list_materials", "get_material", "tag_material_zone",
+        "read_material_zones", "recommend_density_from_pressure_map",
+    })
+
     def list_materials(self, args: Dict[str, Any]) -> str:
         """List materials in the reference DB, optionally filtered by category.
 

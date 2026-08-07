@@ -1073,6 +1073,7 @@ class FreeCADSocketServer:
             "finger_segment_operations": self.finger_segment_ops,
             "quadruped_limb_operations": self.quadruped_limb_ops,
             "four_bar_knee_operations": self.four_bar_knee_ops,
+            "materials_operations": self.materials_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
