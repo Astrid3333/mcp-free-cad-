@@ -37,6 +37,25 @@ def _find_open_wires(shape):
     return [Part.Wire(group) for group in wire_groups]
 
 
+def _shape_from_obj(obj, tolerance=0.1):
+    """Devuelve un Part.Shape utilizable tanto para Part::Feature (obj.Shape)
+    como para Mesh::Feature (obj.Mesh) -- este ultimo es el caso comun al
+    importar STL/PLY escaneados, que es justamente el flujo que este modulo
+    dice soportar. Sin este fallback, analyze_mesh_defects/patch_holes
+    fallaban con AttributeError contra cualquier malla real importada."""
+    shp = getattr(obj, "Shape", None)
+    if shp is not None and not shp.isNull():
+        return shp
+    mesh = getattr(obj, "Mesh", None)
+    if mesh is not None:
+        shape = Part.Shape()
+        shape.makeShapeFromMesh(mesh.Topology, tolerance)
+        return shape
+    raise AttributeError(
+        f"'{obj.Name}' no tiene ni .Shape ni .Mesh -- tipo no soportado ({obj.TypeId})"
+    )
+
+
 class MeshRepairOpsHandler(BaseHandler):
     _ALLOWED_OPERATIONS = {"analyze_mesh_defects", "patch_holes"}
 
@@ -49,7 +68,7 @@ class MeshRepairOpsHandler(BaseHandler):
         if obj is None:
             return json.dumps({"error": f"No se encontro el objeto '{object_name}'"})
 
-        shp = obj.Shape
+        shp = _shape_from_obj(obj)
         wires = _find_open_wires(shp)
         holes = []
         for i, w in enumerate(wires):
@@ -90,7 +109,7 @@ class MeshRepairOpsHandler(BaseHandler):
         hole_indices = args.get("hole_indices")
         new_name = args.get("name")
 
-        shp = obj.Shape
+        shp = _shape_from_obj(obj)
         wires = _find_open_wires(shp)
         if not wires:
             return json.dumps({"object_name": object_name, "patched": 0, "message": "no se detectaron huecos"})
