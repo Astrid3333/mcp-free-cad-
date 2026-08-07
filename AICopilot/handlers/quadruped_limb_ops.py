@@ -61,6 +61,20 @@ SPECIES_PRESETS: Dict[str, Dict[str, Dict[str, Any]]] = {
         "fore": {"joint_rom_deg": (10.0, 60.0), "segment_ratio": 0.60, "typical_joint": "carpus/fetlock"},
         "hind": {"joint_rom_deg": (10.0, 55.0), "segment_ratio": 0.55, "typical_joint": "hock/fetlock"},
     },
+    "rabbit": {
+        # Lagomorfo -- adaptado a salto, ROM mayor y ratio de segmento distal
+        # más corto que canine/feline. Placeholder de ingeniería, no dato
+        # clínico verificado.
+        "fore": {"joint_rom_deg": (30.0, 150.0), "segment_ratio": 0.50, "typical_joint": "carpus"},
+        "hind": {"joint_rom_deg": (45.0, 170.0), "segment_ratio": 0.45, "typical_joint": "tarsus (hock adaptado a salto)"},
+    },
+    "avian": {
+        # Casos de prótesis en ave son excepcionales (mayormente pata/tarso,
+        # rara vez ala) -- placeholder aún menos validado que el resto,
+        # incluido solo como punto de partida geométrico.
+        "fore": {"joint_rom_deg": (20.0, 140.0), "segment_ratio": 0.50, "typical_joint": "carpometacarpo (ala, prótesis rara)"},
+        "hind": {"joint_rom_deg": (30.0, 155.0), "segment_ratio": 0.40, "typical_joint": "tarsometatarso"},
+    },
 }
 
 VALID_SPECIES = tuple(SPECIES_PRESETS.keys())

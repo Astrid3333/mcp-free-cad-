@@ -90,6 +90,34 @@ MATERIALS_DB: Dict[str, Dict[str, Any]] = {
         "source": "General mycelium-composite literature (packaging/insulation "
                   "studies), not prosthetics-specific",
     },
+    "silicone_medical": {
+        "category": "flexible_zone",
+        "shore_hardness": "A20-A40",
+        "density_g_cm3": 1.12,
+        "notes": "Cast medical-grade silicone liner -- not FDM-printable, "
+                 "molded separately. Best skin-contact comfort of the "
+                 "flexible options, but not a structural material.",
+        "source": "Generic platinum-cure medical-grade silicone datasheet values",
+    },
+    "peek": {
+        "category": "high_performance_thermoplastic",
+        "tensile_strength_mpa": 95.0,
+        "density_g_cm3": 1.3,
+        "notes": "High-temperature, high-strength, biocompatible -- needs a "
+                 "heated-chamber FDM printer (Tnozzle ~400C). Overkill for "
+                 "most sockets, relevant for load-bearing inserts near skin "
+                 "contact.",
+        "source": "Generic medical-grade PEEK filament datasheet values",
+    },
+    "eva_foam": {
+        "category": "liner_padding",
+        "shore_hardness": "Asker C 25-45",
+        "density_g_cm3": 0.15,
+        "notes": "Closed-cell foam liner/padding, not FDM-printable -- "
+                 "sheet-cut or molded. Cheap, replaceable comfort layer "
+                 "over a rigid shell.",
+        "source": "Generic EVA foam prosthetic liner datasheet values",
+    },
 }
 
 # Pressure -> density band. Bands are fractions of max_expected_kpa; each
