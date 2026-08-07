@@ -394,8 +394,8 @@ class FourBarKneeHandler(BaseHandler):
                 box = Part.makeBox(length, link_width, link_thickness)
                 box.rotate(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), angle_deg)
                 box.translate(FreeCAD.Vector(
-                    p1.x - link_width / 2 * math.sin(math.radians(angle_deg)),
-                    p1.y + link_width / 2 * math.cos(math.radians(angle_deg)), 0))
+                    p1.x + link_width / 2 * math.sin(math.radians(angle_deg)),
+                    p1.y - link_width / 2 * math.cos(math.radians(angle_deg)), 0))
                 obj = doc.addObject("Part::Feature", name)
                 obj.Shape = box
                 return obj
