@@ -39,6 +39,7 @@ from .cosmetic_shell_operations import CosmeticShellOpsHandler
 from .finger_segment_operations import FingerSegmentOpsHandler
 from .quadruped_limb_ops import QuadrupedLimbHandler
 from .materials_ops import MaterialsOpsHandler
+from .harness_attachment_ops import HarnessAttachmentOpsHandler
 
 __all__ = [
     'QuadrupedLimbHandler',
@@ -74,4 +75,5 @@ __all__ = [
     'FittingHistoryOpsHandler',
     'LightweightOpsHandler',
     'MaterialsOpsHandler',
+    'HarnessAttachmentOpsHandler',
 ]

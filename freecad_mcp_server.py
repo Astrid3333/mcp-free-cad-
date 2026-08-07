@@ -2725,6 +2725,48 @@ async def main():
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
                 ),
+
+                types.Tool(
+                    name="harness_attachment_operations",
+                    description=(
+                        "Strap/harness anchor point placement and straight-line clearance "
+                        "screening for external-suspension prosthetic and orthotic devices "
+                        "(e.g. quadruped limb harnesses). NOT a strap tension/load simulator "
+                        "and NOT a solid-collision checker. "
+                        "list_anchor_presets: read-only, returns built-in anchor hardware "
+                        "presets (webbing width, proxy post/slot dimensions). "
+                        "place_strap_anchor: creates a proxy anchor solid (post/slot) at a "
+                        "given position -- union it into the target shell afterwards. "
+                        "check_strap_clearance: pairwise straight-line distance screening "
+                        "between anchor points against a minimum clearance."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "list_anchor_presets", "place_strap_anchor",
+                                "check_strap_clearance"]},
+                            "doc_name": {"type": "string",
+                                         "description": "FreeCAD document name (default: active document)"},
+                            "anchor_type": {"type": "string",
+                                            "description": "place_strap_anchor only: one of list_anchor_presets() keys (default 'd_ring_loop')"},
+                            "position": {"type": "array", "items": {"type": "number"},
+                                         "description": "place_strap_anchor only: [x, y, z] mm anchor origin"},
+                            "normal": {"type": "array", "items": {"type": "number"},
+                                       "description": "place_strap_anchor only: [x, y, z] outward-normal direction (default [0,0,1])"},
+                            "name": {"type": "string",
+                                     "description": "place_strap_anchor only: name for the resulting proxy object"},
+                            "overrides": {"type": "object",
+                                          "description": "place_strap_anchor only: dict overriding preset dimensions, e.g. {'post_diameter_mm': 7.0}"},
+                            "positions": {"type": "array", "items": {"type": "array", "items": {"type": "number"}},
+                                          "description": "check_strap_clearance only: list of [x,y,z] mm anchor positions (>=2)"},
+                            "min_clearance_mm": {"type": "number", "default": 30.0,
+                                                  "description": "check_strap_clearance only: minimum acceptable pairwise distance"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
             ]
             return base_tools + smart_dispatchers
 
@@ -2927,7 +2969,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection

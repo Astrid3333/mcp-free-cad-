@@ -24,7 +24,16 @@ from typing import Dict, Any, List, Optional
 from .base import BaseHandler
 
 
+# Fallback 0: stub in-tree (vive en este mismo repo, bajo <repo>/inspector/).
+# Esto es lo que existe hoy -- un set mínimo de reglas de screening geométrico
+# (model.shape_validity, model.zero_or_negative_volume, model.degenerate_bbox
+# + reglas laser/resin/cnc_3axis), NO el paquete FC-tools completo externo.
+_INTREE_INSPECTOR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'inspector')
+)
+
 _FALLBACK_PATHS = [
+    _INTREE_INSPECTOR,
     os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'FC-tools')),
     '/Volumes/Files/claude/FC-tools',
 ]

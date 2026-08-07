@@ -193,6 +193,7 @@ try:
         QuadrupedLimbHandler,
         FourBarKneeHandler,
         MaterialsOpsHandler,
+        HarnessAttachmentOpsHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -352,6 +353,7 @@ class FreeCADSocketServer:
         self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
         self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
         self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
+        self.harness_attachment_ops = HarnessAttachmentOpsHandler(self, _log_operation, _capture_state)
         self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
         # GUI-sensitive handlers get the task queues for thread safety
         self.view_ops = ViewOpsHandler(
@@ -1074,6 +1076,7 @@ class FreeCADSocketServer:
             "quadruped_limb_operations": self.quadruped_limb_ops,
             "four_bar_knee_operations": self.four_bar_knee_ops,
             "materials_operations": self.materials_ops,
+            "harness_attachment_operations": self.harness_attachment_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
@@ -1629,6 +1632,7 @@ class FreeCADSocketServer:
                 QuadrupedLimbHandler,
                 FourBarKneeHandler,
                 MaterialsOpsHandler,
+                HarnessAttachmentOpsHandler,
             )
 
             # Re-create handler instances
@@ -1666,6 +1670,7 @@ class FreeCADSocketServer:
             self.fitting_history_ops = FittingHistoryOpsHandler(self, _log_operation, _capture_state)
             self.lightweight_ops = LightweightOpsHandler(self, _log_operation, _capture_state)
             self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
+            self.harness_attachment_ops = HarnessAttachmentOpsHandler(self, _log_operation, _capture_state)
             self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
             self.view_ops = ViewOpsHandler(
                 self, self._gui_task_queue, self._gui_response_queue,

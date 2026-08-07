@@ -67,14 +67,24 @@ configurado debería reportar la instancia de FreeCAD activa con su socket.
 
 ## Inspector (DRC checks) — opcional
 
-`run_inspector` requiere [FC-tools](https://github.com/) instalado por separado.
-Configurá la ruta con la variable de entorno:
+`run_inspector` corre reglas de screening geométrico (shape validity, volumen
+cero/negativo, bounding box degenerado, más un puñado de reglas por proceso
+de fabricación: laser/resin/cnc_3axis) contra el documento activo.
+
+El paquete `inspector/` vive **dentro de este repo** (no es una dependencia
+externa que haya que instalar aparte) y se resuelve automáticamente. Si
+preferís usar una implementación distinta, podés apuntar a otra ruta:
 
 ```bash
-export FREECAD_INSPECTOR_PATH=/ruta/a/FC-tools
+export FREECAD_INSPECTOR_PATH=/ruta/a/tu/inspector
 ```
 
-o la preferencia de FreeCAD `Mod/AICopilot → InspectorPath`.
+o la preferencia de FreeCAD `Mod/AICopilot → InspectorPath` (tiene prioridad
+sobre el stub in-tree).
+
+**Importante:** este `inspector/` es un stub mínimo propio, no un producto de
+terceros validado — mismo nivel de confianza que el resto del pipeline de
+prótesis: screening de primer paso, no reemplaza revisión manual ni FEA.
 
 ## Estado de las herramientas
 
