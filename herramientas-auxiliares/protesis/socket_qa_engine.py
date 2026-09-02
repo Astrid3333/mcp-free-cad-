@@ -9,7 +9,7 @@ import json
 import sys
 
 # Ajustar el path al repo si el script se corre fuera del contexto del plugin
-sys.path.insert(0, "/ruta/a/mcp-free-cad-/AICopilot")  # <-- ajustar
+sys.path.insert(0, "/home/astrid/mcp-free-cad-/AICopilot")  # <-- ajustar
 
 from handlers.validation_operations import ValidationOpsHandler
 
