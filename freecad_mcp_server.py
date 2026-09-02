@@ -3079,7 +3079,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations", "socket_pattern_operations", "fastener_mechanical_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations", "socket_pattern_operations", "fastener_mechanical_operations", "validation_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection

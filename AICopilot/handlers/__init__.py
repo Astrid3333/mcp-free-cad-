@@ -81,5 +81,7 @@ __all__ = [
     'HarnessAttachmentOpsHandler',
     'SocketPatternOpsHandler',
     'FastenerMechanicalOpsHandler',
+    'ValidationOpsHandler',
 ]
+from .validation_operations import ValidationOpsHandler
 from .fastener_mechanical_operations import FastenerMechanicalOpsHandler
