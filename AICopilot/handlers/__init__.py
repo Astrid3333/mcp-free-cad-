@@ -31,6 +31,7 @@ from .growth_socket_ops import GrowthSocketOpsHandler
 from .quick_connect_ops import QuickConnectOpsHandler
 from .fitting_history_ops import FittingHistoryOpsHandler
 from .lightweight_ops import LightweightOpsHandler
+from .materials_ops import MaterialsOpsHandler
 from .organic_ops import OrganicOpsHandler
 from .four_bar_knee_ops import FourBarKneeHandler
 from .mesh_repair_operations import MeshRepairOpsHandler
@@ -40,6 +41,8 @@ from .finger_segment_operations import FingerSegmentOpsHandler
 from .quadruped_limb_ops import QuadrupedLimbHandler
 from .materials_ops import MaterialsOpsHandler
 from .harness_attachment_ops import HarnessAttachmentOpsHandler
+from .socket_pattern_operations import SocketPatternOpsHandler
+from .mesh_repair_operations import MeshRepairOpsHandler
 
 __all__ = [
     'QuadrupedLimbHandler',
@@ -76,4 +79,7 @@ __all__ = [
     'LightweightOpsHandler',
     'MaterialsOpsHandler',
     'HarnessAttachmentOpsHandler',
+    'SocketPatternOpsHandler',
+    'FastenerMechanicalOpsHandler',
 ]
+from .fastener_mechanical_operations import FastenerMechanicalOpsHandler

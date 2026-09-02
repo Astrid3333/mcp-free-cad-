@@ -2767,6 +2767,116 @@ async def main():
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
                 ),
+
+                types.Tool(
+                    name="socket_pattern_operations",
+                    description=(
+                        "Patrones geometricos comunes de socket protesico (transtibial/"
+                        "transfemoral): trim line proximal, rectificacion tipo yeso, "
+                        "shell TSB de espesor variable, offset por liner, chequeo de "
+                        "draft angles, y transicion suave socket-pylon. "
+                        "generate_trim_line: contorno de corte proximal parametrico "
+                        "(alza patelar, caida poplitea, alivios). "
+                        "rectify_socket: build-up/relief local sobre un Mesh de escaneo. "
+                        "total_surface_bearing_shell: shell de espesor variable + flare distal. "
+                        "liner_offset: superficie interior efectiva descontando espesor de liner(s). "
+                        "check_draft_angles: reporta caras por debajo del angulo minimo de tiro "
+                        "(no modifica geometria). "
+                        "socket_pylon_transition: loft + fillet entre socket y adaptador/pylon."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "generate_trim_line", "rectify_socket",
+                                "total_surface_bearing_shell", "liner_offset",
+                                "check_draft_angles", "socket_pylon_transition"]},
+                            "doc_name": {"type": "string",
+                                         "description": "Opcional; usa el documento activo si se omite"},
+                            "shape": {"type": "string",
+                                      "description": "Nombre del objeto de referencia (socket/superficie/solido), segun la operacion"},
+                            "mesh": {"type": "string",
+                                     "description": "rectify_socket only: nombre del objeto Mesh a rectificar"},
+                            "pylon_interface": {"type": "string",
+                                                 "description": "socket_pylon_transition only: nombre del objeto de interfaz de pylon/adaptador"},
+                            "name": {"type": "string",
+                                     "description": "Nombre para el objeto resultante (opcional, se autogenera si se omite)"},
+                            "proximal_plane_z": {"type": "number",
+                                                  "description": "generate_trim_line only: altura Z del plano proximal base"},
+                            "n_points": {"type": "integer", "default": 72,
+                                         "description": "generate_trim_line only: puntos de muestreo del contorno"},
+                            "anterior_patellar_rise": {"type": "number", "default": 15.0,
+                                                        "description": "generate_trim_line only: mm de alza en la zona patelar anterior"},
+                            "anterior_angle_deg": {"type": "number", "default": 0.0,
+                                                    "description": "generate_trim_line only: angulo del centro del alza patelar"},
+                            "posterior_popliteal_drop": {"type": "number", "default": 10.0,
+                                                          "description": "generate_trim_line only: mm de caida en la zona poplitea posterior"},
+                            "medial_relief_deg": {"type": "number", "default": 20.0,
+                                                   "description": "generate_trim_line only: semiancho angular de las zonas de alivio"},
+                            "zones": {"type": "array", "items": {"type": "object"},
+                                      "description": "rectify_socket only: lista de {center:[x,y,z], radius_mm, offset_mm}"},
+                            "falloff": {"type": "string", "enum": ["gaussian", "linear"], "default": "gaussian",
+                                        "description": "rectify_socket only"},
+                            "thickness_proximal_mm": {"type": "number",
+                                                       "description": "total_surface_bearing_shell only"},
+                            "thickness_distal_mm": {"type": "number",
+                                                     "description": "total_surface_bearing_shell only"},
+                            "flare_distal_mm": {"type": "number", "default": 0.0,
+                                                 "description": "total_surface_bearing_shell only"},
+                            "flare_length_mm": {"type": "number", "default": 20.0,
+                                                 "description": "total_surface_bearing_shell only"},
+                            "n_slices": {"type": "integer", "default": 12,
+                                         "description": "total_surface_bearing_shell only"},
+                            "liner_layers_mm": {"type": "array", "items": {"type": "number"},
+                                                 "description": "liner_offset only: espesores en mm desde la piel hacia afuera"},
+                            "pull_direction": {"type": "array", "items": {"type": "number"}, "default": [0, 0, 1],
+                                                "description": "check_draft_angles only"},
+                            "min_draft_deg": {"type": "number", "default": 3.0,
+                                               "description": "check_draft_angles only"},
+                            "fillet_radius_mm": {"type": "number", "default": 3.0,
+                                                  "description": "socket_pylon_transition only"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
+
+                types.Tool(
+                    name="fastener_mechanical_operations",
+                    description=(
+                        "Parametric prosthetic fasteners: shoulder pins, ISO M3-M8 threads, bushings."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["shoulder_pin", "iso_thread", "bushing"],
+                                "description": "Fastener type to generate"
+                            },
+                            "shank_diameter": {"type": "number", "description": "mm"},
+                            "shank_length": {"type": "number", "description": "mm"},
+                            "shoulder_diameter": {"type": "number", "description": "mm"},
+                            "shoulder_position": {"type": "number", "description": "mm"},
+                            "head_diameter": {"type": "number", "description": "mm (optional)"},
+                            "head_height": {"type": "number", "description": "mm (optional)"},
+                            "chamfered": {"type": "boolean", "default": True},
+                            "size": {"type": "string", "enum": ["M3", "M4", "M5", "M6", "M8"]},
+                            "length": {"type": "number", "description": "mm"},
+                            "internal": {"type": "boolean", "default": False},
+                            "turns": {"type": "integer", "default": 0},
+                            "outer_diameter": {"type": "number", "description": "mm"},
+                            "inner_diameter": {"type": "number", "description": "mm"},
+                            "radial_clearance": {"type": "number", "description": "mm"},
+                            "flanged": {"type": "boolean", "default": False},
+                            "flange_diameter": {"type": "number", "description": "mm"},
+                            "flange_thickness": {"type": "number", "description": "mm"},
+                            "material": {"type": "string"}
+                        },
+                        "required": ["operation"]
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
+                ),
             ]
             return base_tools + smart_dispatchers
 
@@ -2969,7 +3079,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations", "socket_pattern_operations", "fastener_mechanical_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection

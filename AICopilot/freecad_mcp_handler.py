@@ -185,6 +185,7 @@ try:
         QuickConnectOpsHandler,
         FittingHistoryOpsHandler,
         LightweightOpsHandler,
+        MaterialsOpsHandler,
         OrganicOpsHandler,
         MeshRepairOpsHandler,
         PrintSegmentationOpsHandler,
@@ -194,6 +195,8 @@ try:
         FourBarKneeHandler,
         MaterialsOpsHandler,
         HarnessAttachmentOpsHandler,
+        SocketPatternOpsHandler,
+        FastenerMechanicalOpsHandler,
     )
     FreeCAD.Console.PrintMessage("Modular handlers loaded successfully\n")
 except ImportError as e:
@@ -355,6 +358,8 @@ class FreeCADSocketServer:
         self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
         self.harness_attachment_ops = HarnessAttachmentOpsHandler(self, _log_operation, _capture_state)
         self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
+        self.socket_pattern_ops = SocketPatternOpsHandler(self, _log_operation, _capture_state)
+        self.fastener_mechanical_ops = FastenerMechanicalOpsHandler(self, _log_operation, _capture_state)
         # GUI-sensitive handlers get the task queues for thread safety
         self.view_ops = ViewOpsHandler(
             self, self._gui_task_queue, self._gui_response_queue, _log_operation, _capture_state
@@ -1068,6 +1073,7 @@ class FreeCADSocketServer:
             "quick_connect_operations": self.quick_connect_ops,
             "fitting_history_operations": self.fitting_history_ops,
             "lightweight_operations": self.lightweight_ops,
+            "materials_operations": self.materials_ops,
             "organic_operations": self.organic_ops,
             "mesh_repair_operations": self.mesh_repair_ops,
             "print_segmentation_operations": self.print_segmentation_ops,
@@ -1077,6 +1083,8 @@ class FreeCADSocketServer:
             "four_bar_knee_operations": self.four_bar_knee_ops,
             "materials_operations": self.materials_ops,
             "harness_attachment_operations": self.harness_attachment_ops,
+            "socket_pattern_operations": self.socket_pattern_ops,
+            "fastener_mechanical_operations": self.fastener_mechanical_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
@@ -1624,6 +1632,7 @@ class FreeCADSocketServer:
                 QuickConnectOpsHandler,
                 FittingHistoryOpsHandler,
                 LightweightOpsHandler,
+        MaterialsOpsHandler,
                 OrganicOpsHandler,
                 MeshRepairOpsHandler,
                 PrintSegmentationOpsHandler,
@@ -1633,6 +1642,8 @@ class FreeCADSocketServer:
                 FourBarKneeHandler,
                 MaterialsOpsHandler,
                 HarnessAttachmentOpsHandler,
+                SocketPatternOpsHandler,
+                FastenerMechanicalOpsHandler,
             )
 
             # Re-create handler instances
@@ -1672,6 +1683,7 @@ class FreeCADSocketServer:
             self.materials_ops = MaterialsOpsHandler(self, _log_operation, _capture_state)
             self.harness_attachment_ops = HarnessAttachmentOpsHandler(self, _log_operation, _capture_state)
             self.fixture_ops = FixtureOpsHandler(self, _log_operation, _capture_state)
+            self.socket_pattern_ops = SocketPatternOpsHandler(self, _log_operation, _capture_state)
             self.view_ops = ViewOpsHandler(
                 self, self._gui_task_queue, self._gui_response_queue,
                 _log_operation, _capture_state
