@@ -15,6 +15,17 @@ sys.path.insert(0, "/ruta/a/mcp-free-cad-/AICopilot")  # <-- ajustar
 from handlers.validation_operations import ValidationOpsHandler
 
 
+def _call(handler, method_name, args):
+    """Invoca un método del handler y parsea su resultado (str -> dict)."""
+    method = getattr(handler, method_name)
+    raw = method(args)
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        # Si el método no devuelve JSON, lo envolvemos como texto plano
+        return {"raw": raw}
+
+
 def run_socket_qa(doc_name=None, socket_obj_name=None, verbose=True):
     """
     Corre el pipeline completo de QA sobre un socket:
@@ -28,7 +39,7 @@ def run_socket_qa(doc_name=None, socket_obj_name=None, verbose=True):
     findings = []
 
     # 1. Validación geométrica del sólido
-    solid_result = handler.dispatch("validate_solid", {
+    solid_result = _call(handler, "validate_solid", {
         "doc_name": doc.Name,
         "object_name": socket_obj_name,
     })
@@ -36,20 +47,20 @@ def run_socket_qa(doc_name=None, socket_obj_name=None, verbose=True):
 
     # 2. Validación de zonas de material (si el objeto tiene tags)
     if socket_obj_name:
-        mat_result = handler.dispatch("validate_material_zone", {
+        mat_result = _call(handler, "validate_material_zone", {
             "doc_name": doc.Name,
             "object_name": socket_obj_name,
         })
         findings.extend(mat_result.get("findings", []))
 
     # 3. Validación del flujo completo del socket (secciones, materiales, pressure map)
-    workflow_result = handler.dispatch("validate_socket_workflow", {
+    workflow_result = _call(handler, "validate_socket_workflow", {
         "doc_name": doc.Name,
     })
     findings.extend(workflow_result.get("findings", []))
 
     # 4. Reporte agregado (FAIL / PROCEED_WITH_CAUTION / PASS)
-    report = handler.dispatch("report_validation", {
+    report = _call(handler, "report_validation", {
         "findings": findings,
     })
 
