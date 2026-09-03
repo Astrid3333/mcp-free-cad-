@@ -354,6 +354,133 @@ class SocketPatternOpsHandler(BaseHandler):
         except Exception as e:
             return json.dumps({"ok": False, "details": {}, "message": f"Error: {e}"})
 
+
+    def build_tsb_shell(self, args: Dict[str, Any]) -> str:
+        """Construye shell TSB via wire extraction (band.slice -> offset -> Part.makeLoft)."""
+        try:
+            socket_name = args.get("socket_name", "")
+            thickness_mm = args.get("shell_thickness_mm", 3.5)
+            material_zone = args.get("material_zone", "primary_contact")
+            
+            if not socket_name:
+                return json.dumps({"ok": False, "details": {}, "message": "Missing: socket_name"})
+            
+            import FreeCAD
+            doc = FreeCAD.ActiveDocument
+            if not doc:
+                return json.dumps({"ok": False, "details": {}, "message": "No active FreeCAD document"})
+            
+            socket_obj = doc.getObject(socket_name)
+            if not socket_obj or not hasattr(socket_obj, "Shape"):
+                return json.dumps({"ok": False, "details": {}, "message": f"Socket not found: {socket_name}"})
+            
+            shape = socket_obj.Shape
+            faces = shape.Faces
+            if not faces:
+                return json.dumps({"ok": False, "details": {}, "message": "No faces in socket"})
+            
+            band_face = max(faces, key=lambda f: f.Area) if faces else None
+            if not band_face:
+                return json.dumps({"ok": False, "details": {}, "message": "Could not select band"})
+            
+            shell = self._create_tsb_shell_from_face(band_face, thickness_mm)
+            if shell is None:
+                return json.dumps({
+                    "ok": False,
+                    "details": {"band_area_mm2": band_face.Area},
+                    "message": "Wire extraction failed"
+                })
+            
+            shell_obj = doc.addObject("Part::Feature", f"{socket_name}_Shell")
+            shell_obj.Shape = shell
+            
+            if material_zone:
+                if not hasattr(shell_obj, "MaterialZone"):
+                    shell_obj.addProperty("App::PropertyString", "MaterialZone", "Socket")
+                shell_obj.MaterialZone = material_zone
+            
+            doc.recompute()
+            
+            return json.dumps({
+                "ok": True,
+                "details": {
+                    "socket_name": socket_name,
+                    "shell_obj_name": shell_obj.Name,
+                    "shell_thickness_mm": thickness_mm,
+                    "shell_surface_area_mm2": shell.Area,
+                    "material_zone": material_zone,
+                },
+                "message": f"TSB shell created: {shell_obj.Name}"
+            })
+        
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {}, "message": f"Error: {e}"})
+    
+    def _create_tsb_shell_from_face(self, band_face: "Part.Face", thickness_mm: float):
+        """Wire extraction: band_face.slice() -> offset -> Part.makeLoft()."""
+        try:
+            import Part
+            
+            if band_face is None or band_face.isNull():
+                return None
+            
+            wires = band_face.slice() if hasattr(band_face, 'slice') else []
+            if not wires:
+                wires = [band_face.OuterWire] if hasattr(band_face, 'OuterWire') else []
+            
+            if not wires:
+                return None
+            
+            if not isinstance(wires, (list, tuple)):
+                wires = [wires]
+            
+            wires_offset = []
+            for wire in wires:
+                if wire is None or wire.isNull():
+                    continue
+                
+                try:
+                    temp_face = Part.Face(wire)
+                    offset_face = temp_face.makeOffsetShape(thickness_mm, 1e-6, True)
+                    
+                    if offset_face and not offset_face.isNull():
+                        offset_wires = offset_face.Wires
+                        if offset_wires and len(offset_wires) > 0:
+                            wires_offset.append(offset_wires[0])
+                        else:
+                            wires_offset.append(wire)
+                    else:
+                        wires_offset.append(wire)
+                except Exception:
+                    wires_offset.append(wire)
+            
+            if not wires_offset:
+                return None
+            
+            if len(wires) == 1 and len(wires_offset) == 1:
+                lofted = Part.makeLoft([wires[0], wires_offset[0]], False, False)
+                if lofted and not lofted.isNull():
+                    return Part.Shell([lofted])
+            else:
+                faces = []
+                for w_orig, w_offset in zip(wires, wires_offset):
+                    try:
+                        lofted = Part.makeLoft([w_orig, w_offset], False, False)
+                        if lofted and not lofted.isNull():
+                            faces.append(lofted)
+                    except Exception:
+                        pass
+                
+                if faces:
+                    return Part.Shell(faces)
+            
+            return None
+        
+        except Exception as e:
+            print(f"❌ Wire extraction error: {e}")
+            return None
+
+
     def socket_pylon_transition(self, args: Dict[str, Any]) -> str:
         """Transicion (loft + fillet) entre socket y adaptador/pylon.
         Args: doc_name, shape(socket), pylon_interface, fillet_radius_mm(3.0), name"""
