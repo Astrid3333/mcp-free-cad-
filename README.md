@@ -130,9 +130,37 @@ número), nunca un dato personal real.
 
 ## Troubleshooting
 
-- **"Unknown tool" en alguna operación**: el handler correspondiente no está
-  implementado aún. Revisá `AICopilot/handlers/` para ver qué módulos existen.
-- **`check_freecad_connection` no encuentra nada**: confirmá que FreeCAD está
-  abierto con GUI (no en modo `freecadcmd`) y que el addon cargó sin errores
-  (revisá la consola Python de FreeCAD al arrancar).
+### FreeCAD vía Flatpak — sandbox bloquea `/tmp`
 
+> **⚠️ Importante para Flatpak**
+> El sandbox de Flatpak restringe por defecto el acceso a `/tmp` y al cache del sistema, que es donde el bridge escribe el socket de comunicación. Sin este permiso, el addon no podrá conectar con el servidor MCP.
+
+Otorga los permisos necesarios antes de iniciar FreeCAD:
+
+```bash
+flatpak override --user --filesystem=/tmp --filesystem=xdg-cache org.freecad.FreeCAD
+```
+
+Este cambio es persistente por usuario — solo necesitas correrlo una vez.
+
+### "Unknown tool"
+
+Este error significa que el handler que intentas invocar no está implementado (o no está registrado) en el addon.
+
+- Revisa `AICopilot/handlers/` para confirmar qué módulos existen y qué operaciones exponen.
+- Si el handler existe pero sigue sin reconocerse, confirma que FreeCAD se reinició después del cambio — los handlers en `AICopilot/` requieren **reiniciar FreeCAD** para tomar efecto (no basta con recargar el addon).
+
+### Conexión fallida
+
+Si Claude no logra comunicarse con FreeCAD:
+
+1. **Confirma que FreeCAD está abierto con interfaz gráfica** — el bridge no funciona en modo `freecadcmd` (headless).
+2. **Revisa la consola Python de FreeCAD** al iniciar, para verificar que el addon cargó sin errores. Un traceback ahí suele ser la causa raíz.
+3. Si cambiaste `freecad_mcp_server.py`, recuerda que ese proceso debe matarse explícitamente y reiniciar Claude Desktop — un simple reinicio de FreeCAD no lo recarga.
+
+### Permiso denegado en `/tmp`
+
+Síntoma relacionado con el problema de Flatpak de arriba. Si ya aplicaste el `flatpak override` y el error persiste:
+
+- Verifica que el override se aplicó al ID correcto de la app: `flatpak info org.freecad.FreeCAD` para confirmarlo.
+- Revisa que no haya un socket viejo bloqueando el directorio (`ls -la /tmp/*freecad*` o similar) y bórralo si corresponde.
