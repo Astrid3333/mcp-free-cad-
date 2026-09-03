@@ -4,6 +4,8 @@ Todas las reglas son screening de primer paso sobre geometría real
 (Part.Shape de FreeCAD) — no reemplazan FEA ni criterio de fabricación.
 """
 
+import math
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -87,7 +89,60 @@ def rule_degenerate_bbox(obj, params: dict) -> Optional[Finding]:
     return None
 
 
-_MODEL_RULES = [rule_shape_validity, rule_zero_or_negative_volume, rule_degenerate_bbox]
+def rule_wall_thickness_offset(obj, params: dict) -> Optional[Finding]:
+    """WARNING si el offset hacia adentro por min_wall_mm/2 falla o produce
+    geometria invalida/vacia -- señal de que hay una pared mas fina que el
+    limite en alguna zona LOCAL de la pieza.
+
+    A diferencia de rule_degenerate_bbox (que solo mira la dimension minima
+    global del bounding box), esto detecta paredes finas en cualquier parte
+    del solido, sin importar el tamaño general de la pieza.
+
+    LIMITACION HONESTA: makeOffsetShape puede fallar por razones que NO son
+    pared fina -- geometria concava compleja, aristas muy filosas, curvatura
+    alta -- asi que esto puede dar falsos positivos en piezas con geometria
+    intrincada aunque las paredes sean gruesas. Es un screening de primer
+    paso, no una medicion de espesor certificada; si da WARNING, conviene
+    confirmar con Part → Measure en la zona señalada antes de asumir que
+    hay que reforzarla.
+    """
+    shape = _obj_shape(obj)
+    if shape is None or shape.isNull():
+        return None
+    if getattr(shape, "ShapeType", None) not in ("Solid", "CompSolid"):
+        return None
+    min_wall_mm = params.get("min_wall_mm", 0.8)
+    try:
+        offset = shape.makeOffsetShape(-min_wall_mm / 2.0, 1e-3, fill=False)
+        offset_failed = offset is None or offset.isNull() or not offset.isValid()
+    except Exception:
+        offset_failed = True
+
+    if offset_failed:
+        return Finding(
+            rule_id="model.wall_thickness_offset",
+            severity=Severity.WARNING,
+            objects=[obj.Name],
+            message=(
+                f"'{obj.Name}': el offset hacia adentro de {min_wall_mm / 2:.3f} mm "
+                "fallo o produjo geometria invalida — señal de pared mas fina que el "
+                "limite en alguna zona local (proxy por offset, no medicion certificada; "
+                "puede dar falso positivo en geometria concava/compleja aunque la pared "
+                "sea gruesa)."
+            ),
+            value=min_wall_mm,
+            limit=min_wall_mm,
+            suggestion="Confirmar con Part → Measure en la zona señalada antes de reforzar; si la geometria es compleja, revisar si el fallo es por curvatura y no por espesor real.",
+        )
+    return None
+
+
+_MODEL_RULES = [
+    rule_shape_validity,
+    rule_zero_or_negative_volume,
+    rule_degenerate_bbox,
+    rule_wall_thickness_offset,
+]
 
 
 # ---------------------------------------------------------------------------
@@ -157,10 +212,78 @@ def _rule_cnc_manual_review(profile: Profile):
     return _rule
 
 
+def _rule_fdm_overhang(profile: Profile):
+    """WARNING si hay caras con angulo de voladizo mayor al critico
+    (default 45 grados desde la vertical) que probablemente necesiten
+    soporte de impresion FDM.
+
+    LIMITACION HONESTA: muestrea la normal en un solo punto (el punto
+    medio del rango de parametros de cada cara) via face.normalAt(u,v).
+    Para caras planas eso alcanza; para caras curvas grandes donde la
+    normal varia mucho dentro de la misma cara, una sola muestra puede
+    no representar toda la cara -- podria pasar por alto voladizo real
+    en parte de una cara curva, o marcar una cara que en su mayoria no
+    es voladizo. Sirve como screening rapido, no reemplaza la vista de
+    voladizo del slicer.
+    """
+    critical_angle_deg = profile.params.get("critical_overhang_angle_deg", 45.0)
+    # default Z=0: convencion estandar de FreeCAD/slicers (apoyar el modelo
+    # en la plataforma en Z=0). NO usar el ZMin propio de cada objeto como
+    # default -- eso excluiria tambien caras que flotan de verdad (un objeto
+    # cuya base real esta en el aire, ej. un brazo en voladizo que arranca
+    # en Z=5 sin nada debajo, tiene su propio ZMin=5 y quedaria excluido
+    # igual, anulando la deteccion). Si tus piezas no arrancan en Z=0, pasar
+    # build_plate_z explicito en profile.params.
+    build_plate_z = profile.params.get("build_plate_z", 0.0)
+    cos_critical = math.cos(math.radians(critical_angle_deg))
+
+    def _rule(obj, params: dict) -> Optional[Finding]:
+        shape = _obj_shape(obj)
+        if shape is None or shape.isNull():
+            return None
+        if getattr(shape, "ShapeType", None) not in ("Solid", "CompSolid"):
+            return None
+
+        offending = []
+        for face in shape.Faces:
+            try:
+                u1, u2, v1, v2 = face.ParameterRange
+                normal = face.normalAt((u1 + u2) / 2.0, (v1 + v2) / 2.0)
+            except Exception:
+                continue
+            # normal.z fuertemente negativo = cara mirando hacia abajo
+            if normal.z < -cos_critical:
+                bb = face.BoundBox
+                if bb.ZMax <= build_plate_z + 1e-3:
+                    continue  # pegada a la plataforma, no es voladizo real
+                offending.append(round(bb.Center.z, 2))
+
+        if offending:
+            return Finding(
+                rule_id="fdm.unsupported_overhang",
+                severity=Severity.WARNING,
+                objects=[obj.Name],
+                message=(
+                    f"'{obj.Name}': {len(offending)} cara(s) con angulo de voladizo mayor "
+                    f"a {critical_angle_deg}° respecto de la vertical -- probablemente "
+                    "necesiten soporte de impresion (muestreo de 1 punto por cara, ver "
+                    "docstring de esta regla para la limitacion en caras curvas)."
+                ),
+                value=float(len(offending)),
+                limit=critical_angle_deg,
+                context={"face_center_z_mm": offending},
+                suggestion="Reorientar la pieza, agregar chaflanes de transicion, o generar soportes en el slicer para esas zonas.",
+            )
+        return None
+
+    return _rule
+
+
 _PROCESS_RULE_BUILDERS = {
     "laser": _rule_laser_planarity,
     "resin": _rule_resin_min_wall,
     "cnc_3axis": _rule_cnc_manual_review,
+    "fdm": _rule_fdm_overhang,
 }
 
 
