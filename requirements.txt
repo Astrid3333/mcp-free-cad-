@@ -1,0 +1,9 @@
+# MCP Bridge & Server
+mcp>=0.1.0
+
+# Testing
+pytest>=6.0
+pytest-cov>=2.12.0
+
+# Optional: para logging y diagnostics
+watchdog>=2.0.0
