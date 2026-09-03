@@ -491,12 +491,236 @@ def _rule_fdm_support_density(objects: List[Any], doc: Any, profile: Any) -> Opt
         return None
 
 
+
+def _rule_model_alignment_check(objects: List[Any], doc: Any, profile: Any) -> Optional[Any]:
+    """Socket + residuum Z-axis alignment check (<10° recomendado)."""
+    try:
+        socket_obj = None
+        residuum_obj = None
+        
+        for obj in objects:
+            if hasattr(obj, "Label"):
+                label = obj.Label.lower()
+                if "socket" in label or "cup" in label:
+                    socket_obj = obj
+                elif "residuum" in label or "stump" in label or "muñon" in label:
+                    residuum_obj = obj
+        
+        if not socket_obj or not residuum_obj:
+            return None
+        
+        z_socket = socket_obj.Placement.Rotation.multVec(Part.Vector(0, 0, 1))
+        z_residuum = residuum_obj.Placement.Rotation.multVec(Part.Vector(0, 0, 1))
+        
+        angle_rad = z_socket.getAngle(z_residuum)
+        angle_deg = angle_rad * 180 / 3.14159265359
+        
+        def _rule(findings: List[Dict], doc: Any, objects: List[Any], severity_override: Optional[str]) -> Optional[Dict]:
+            if angle_deg > 10:
+                severity = severity_override or "warning"
+                findings.append({
+                    "rule_id": "model.alignment_check",
+                    "severity": severity,
+                    "message": f"Socket y Residuum desalineados: {angle_deg:.1f}° (límite: <10°). Revisar Placement.Rotation.",
+                    "objects": [socket_obj.Label, residuum_obj.Label],
+                    "details": {"angle_deg": angle_deg, "limit_deg": 10},
+                })
+            return None
+        
+        return _rule
+    except Exception:
+        return None
+
+
+def _rule_model_interface_smoothness(objects: List[Any], doc: Any, profile: Any) -> Optional[Any]:
+    """Detecta cambios abruptos en curvatura (ángulos entre normales >15°)."""
+    try:
+        def _rule(findings: List[Dict], doc: Any, objects: List[Any], severity_override: Optional[str]) -> Optional[Dict]:
+            abrupt_count = 0
+            for obj in objects:
+                if not hasattr(obj, "Shape") or obj.Shape.isNull():
+                    continue
+                
+                shape = obj.Shape
+                for edge in shape.Edges:
+                    faces_of_edge = [f for f in shape.Faces if edge in f.Edges]
+                    if len(faces_of_edge) == 2:
+                        try:
+                            n1 = faces_of_edge[0].normalAt(0.5, 0.5)
+                            n2 = faces_of_edge[1].normalAt(0.5, 0.5)
+                            angle_rad = n1.getAngle(n2)
+                            angle_deg = angle_rad * 180 / 3.14159265359
+                            if angle_deg > 15:
+                                abrupt_count += 1
+                        except Exception:
+                            pass
+            
+            if abrupt_count > 0:
+                severity = severity_override or "warning"
+                findings.append({
+                    "rule_id": "model.interface_smoothness",
+                    "severity": severity,
+                    "message": f"{abrupt_count} transiciones abruptas (>15°) en curvatura. Considerar filetes o lofts.",
+                    "objects": [o.Label for o in objects if hasattr(o, "Label")],
+                    "details": {"abrupt_count": abrupt_count, "angle_threshold_deg": 15},
+                })
+            return None
+        
+        return _rule
+    except Exception:
+        return None
+
+
+def _rule_model_undercut_detection(objects: List[Any], doc: Any, profile: Any) -> Optional[Any]:
+    """Detecta undercuts: caras cuya normal apunta >30° hacia -Z."""
+    try:
+        def _rule(findings: List[Dict], doc: Any, objects: List[Any], severity_override: Optional[str]) -> Optional[Dict]:
+            undercut_count = 0
+            assembly_direction = Part.Vector(0, 0, 1)
+            
+            for obj in objects:
+                if not hasattr(obj, "Shape") or obj.Shape.isNull():
+                    continue
+                
+                shape = obj.Shape
+                for face in shape.Faces:
+                    try:
+                        normal = face.normalAt(0.5, 0.5)
+                        dot = normal.dot(assembly_direction)
+                        if dot < -0.3:
+                            undercut_count += 1
+                    except Exception:
+                        pass
+            
+            if undercut_count > 0:
+                severity = severity_override or "error"
+                findings.append({
+                    "rule_id": "model.undercut_detection",
+                    "severity": severity,
+                    "message": f"⚠️ {undercut_count} cara(s) potencial undercut. Pueden bloquear ensamble. Revisar draft angle/moldeo.",
+                    "objects": [o.Label for o in objects if hasattr(o, "Label")],
+                    "details": {"undercut_face_count": undercut_count},
+                })
+            return None
+        
+        return _rule
+    except Exception:
+        return None
+
+
+def _rule_fdm_thin_wall_warning(objects: List[Any], doc: Any, profile: Any) -> Optional[Any]:
+    """Detecta paredes por debajo del espesor mínimo FDM (default 1.2mm)."""
+    try:
+        min_thickness = profile.params.get("min_wall_thickness_mm", 1.2) if profile else 1.2
+        
+        def _rule(findings: List[Dict], doc: Any, objects: List[Any], severity_override: Optional[str]) -> Optional[Dict]:
+            for obj in objects:
+                if not hasattr(obj, "Shape") or obj.Shape.isNull():
+                    continue
+                
+                shape = obj.Shape
+                try:
+                    offset_shape = shape.makeOffsetShape(-min_thickness * 0.5, 1e-6, True)
+                    if offset_shape is None or offset_shape.isNull():
+                        severity = severity_override or "warning"
+                        findings.append({
+                            "rule_id": "fdm.thin_wall_warning",
+                            "severity": severity,
+                            "message": f"'{obj.Label}': paredes <{min_thickness}mm. Aumentar espesor o perimetros dobles.",
+                            "objects": [obj.Label],
+                            "details": {"min_wall_thickness_mm": min_thickness},
+                        })
+                except Exception:
+                    severity = severity_override or "warning"
+                    findings.append({
+                        "rule_id": "fdm.thin_wall_warning",
+                        "severity": severity,
+                        "message": f"'{obj.Label}': posible thin wall (offset falló). Revisar espesores.",
+                        "objects": [obj.Label],
+                        "details": {"min_wall_thickness_mm": min_thickness},
+                    })
+            
+            return None
+        
+        return _rule
+    except Exception:
+        return None
+
+
+def _rule_fdm_support_density(objects: List[Any], doc: Any, profile: Any) -> Optional[Any]:
+    """Heurística de densidad de soporte según ángulo de voladizo."""
+    try:
+        def _rule(findings: List[Dict], doc: Any, objects: List[Any], severity_override: Optional[str]) -> Optional[Dict]:
+            support_stats = {"no_support": 0, "light": 0, "dense": 0}
+            
+            for obj in objects:
+                if not hasattr(obj, "Shape") or obj.Shape.isNull():
+                    continue
+                
+                shape = obj.Shape
+                for face in shape.Faces:
+                    try:
+                        normal = face.normalAt(0.5, 0.5)
+                        z_comp = abs(normal.z)
+                        
+                        if z_comp > 0.866:
+                            support_stats["no_support"] += 1
+                        elif z_comp > 0.707:
+                            support_stats["light"] += 1
+                        else:
+                            support_stats["dense"] += 1
+                    except Exception:
+                        pass
+            
+            total = sum(support_stats.values())
+            if total > 0:
+                msg = (
+                    f"Estimación de soporte: "
+                    f"{support_stats['no_support']} sin soporte, "
+                    f"{support_stats['light']} ligero (grid 2-3mm), "
+                    f"{support_stats['dense']} denso (grid 1-2mm)."
+                )
+                findings.append({
+                    "rule_id": "fdm.support_density",
+                    "severity": "info",
+                    "message": msg,
+                    "objects": [o.Label for o in objects if hasattr(o, "Label")],
+                    "details": support_stats,
+                })
+            
+            return None
+        
+        return _rule
+    except Exception:
+        return None
+
+
 def _default_rules(profile: Optional[Profile]) -> List:
     rules = list(_MODEL_RULES)
     if profile is not None:
         builder = _PROCESS_RULE_BUILDERS.get(profile.process)
         if builder is not None:
             rules.append(builder(profile))
+
+    # Nuevas reglas de prótesis (3 sep 2026)
+    if True:  # model rules siempre aplican
+        r = _rule_model_alignment_check(objects, doc, profile)
+        if r:
+            rules.append(r)
+        r = _rule_model_interface_smoothness(objects, doc, profile)
+        if r:
+            rules.append(r)
+        r = _rule_model_undercut_detection(objects, doc, profile)
+        if r:
+            rules.append(r)
+    
+    if profile and profile.process == "fdm":
+        r = _rule_fdm_thin_wall_warning(objects, doc, profile)
+        if r:
+            rules.append(r)
+        r = _rule_fdm_support_density(objects, doc, profile)
+        if r:
+            rules.append(r)
 
     # Nuevas reglas de prótesis (3 sep 2026)
     if True:  # model rules siempre aplican
