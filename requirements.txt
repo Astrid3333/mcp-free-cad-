@@ -1,9 +1,8 @@
-# MCP Bridge & Server
-mcp>=0.1.0
-
-# Testing
-pytest>=6.0
-pytest-cov>=2.12.0
-
-# Optional: para logging y diagnostics
-watchdog>=2.0.0
+# mcp-free-cad- no tiene dependencias de PyPI para runtime.
+#
+# Todo lo que usa el bridge (freecad_mcp_server.py, mcp_bridge_framing.py,
+# AICopilot/handlers/*) es libreria estandar de Python, mas los modulos
+# internos de FreeCAD (FreeCAD, FreeCADGui, Part, Path), que vienen con
+# la propia instalacion de FreeCAD y no se instalan via pip.
+#
+# Ver requirements-dev.txt para dependencias de testing.
