@@ -2877,6 +2877,47 @@ async def main():
                     },
                     annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True),
                 ),
+                types.Tool(
+                    name="validation_operations",
+                    description="Geometry, mesh, material, fit, and engineering-screening validation "
+                                "checks. 'validate_against_standard' is an engineering screening estimate "
+                                "(axial stress vs. material tensile strength) -- NOT a certified ISO 10328 "
+                                "test, which requires physical load testing.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": [
+                                    "validate_solid", "validate_mesh", "validate_sketch",
+                                    "validate_material_zone", "validate_socket_workflow",
+                                    "validate_finger_assembly", "list_validation_rules",
+                                    "report_validation", "validate_fit_clearance",
+                                    "validate_against_standard",
+                                ],
+                                "description": "Validation action.",
+                            },
+                            "shape": {"type": "string", "description": "Object name (validate_solid, validate_material_zone, validate_against_standard)"},
+                            "check_watertight": {"type": "boolean", "default": True, "description": "validate_solid / validate_mesh"},
+                            "mesh": {"type": "string", "description": "Object name with a Mesh (validate_mesh)"},
+                            "socket": {"type": "string", "description": "Object name (validate_socket_workflow)"},
+                            "material_zones": {"type": "boolean", "default": False, "description": "validate_socket_workflow"},
+                            "shape_a": {"type": "string", "description": "First object name (validate_fit_clearance)"},
+                            "shape_b": {"type": "string", "description": "Second object name (validate_fit_clearance)"},
+                            "interference_severity": {"type": "string", "enum": ["error", "warning", "info"], "default": "warning", "description": "validate_fit_clearance"},
+                            "target_clearance_min_mm": {"type": "number", "description": "validate_fit_clearance, optional"},
+                            "target_clearance_max_mm": {"type": "number", "description": "validate_fit_clearance, optional"},
+                            "findings": {"type": "array", "items": {"type": "object"}, "description": "report_validation: list of finding dicts with a severity field"},
+                            "axis": {"type": "string", "enum": ["x", "y", "z"], "default": "z", "description": "validate_against_standard: axis to cut the cross-section on"},
+                            "coord": {"type": "number", "description": "validate_against_standard: coordinate along axis to check"},
+                            "force_n": {"type": "number", "description": "validate_against_standard: applied axial force in Newtons"},
+                            "material": {"type": "string", "description": "validate_against_standard: material key, see materials_operations list_materials"},
+                            "safety_factor_target": {"type": "number", "default": 1.5, "description": "validate_against_standard: minimum acceptable factor of safety (engineering rule of thumb, not an ISO 10328 value)"},
+                        },
+                        "required": ["operation"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+                ),
             ]
             return base_tools + smart_dispatchers
 
