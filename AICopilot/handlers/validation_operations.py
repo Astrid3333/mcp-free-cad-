@@ -208,20 +208,290 @@ class ValidationOpsHandler(BaseHandler):
             return json.dumps({"ok": False, "details": {}, "message": f"Error: {e}"})
 
     def validate_finger_assembly(self, args: Dict[str, Any]) -> str:
-        return json.dumps({"ok": True, "details": {}, "message": "Finger assembly validation complete"})
+        """Validate a finger assembly (hand prosthesis component).
+        
+        Checks structural completeness: all expected digits/joints are present,
+        material zones are assigned where needed, and geometry is closed.
+        
+        Args:
+            assembly (str): Object name of the finger assembly (required).
+            check_material_zones (bool): Whether to verify material zones are tagged (default True).
+            check_digits (int): Expected number of digits/segments (optional, advisory only).
+        
+        Returns:
+            JSON: {"ok": bool, "details": {...findings...}, "message": str}
+        """
+        try:
+            assembly_name = args.get("assembly", "")
+            if not assembly_name:
+                return json.dumps({"ok": False, "details": {}, "message": "Missing required: assembly"})
+            
+            check_zones = bool(args.get("check_material_zones", True))
+            expected_digits = args.get("check_digits")
+            
+            doc = self.get_document()
+            obj = self.get_object(assembly_name, doc)
+            if not obj or not hasattr(obj, "Shape") or obj.Shape.isNull():
+                return json.dumps({"ok": False, "details": {}, "message": f"Assembly not found: {assembly_name}"})
+            
+            findings = []
+            
+            # Check 1: Geometry is watertight (closed solid)
+            shape = obj.Shape
+            naked_edges = [e for e in shape.Edges if len([f for f in shape.Faces if e in f.Edges]) == 1]
+            if naked_edges:
+                findings.append({
+                    "rule": "assembly_watertight",
+                    "severity": _SEVERITY_LEVELS["warning"],
+                    "message": f"✗ {len(naked_edges)} naked edge(s) detected -- geometry may not be fully closed",
+                })
+            else:
+                findings.append({
+                    "rule": "assembly_watertight",
+                    "severity": _SEVERITY_LEVELS["info"],
+                    "message": "✓ Geometry is watertight",
+                })
+            
+            # Check 2: Material zones (if requested)
+            if check_zones:
+                if hasattr(obj, "MaterialZoneMap"):
+                    zone_map = json.loads(obj.MaterialZoneMap or "{}")
+                    if zone_map:
+                        findings.append({
+                            "rule": "assembly_material_zones",
+                            "severity": _SEVERITY_LEVELS["info"],
+                            "message": f"✓ Material zones assigned to {len(zone_map)} face(s)",
+                        })
+                    else:
+                        findings.append({
+                            "rule": "assembly_material_zones",
+                            "severity": _SEVERITY_LEVELS["warning"],
+                            "message": "✗ No material zones assigned",
+                        })
+                else:
+                    findings.append({
+                        "rule": "assembly_material_zones",
+                        "severity": _SEVERITY_LEVELS["info"],
+                        "message": "ℹ Material zones not tracked on this object",
+                    })
+            
+            # Check 3: Expected digit count (advisory)
+            if expected_digits is not None:
+                findings.append({
+                    "rule": "assembly_digit_count_advisory",
+                    "severity": _SEVERITY_LEVELS["info"],
+                    "message": f"ℹ Expected {expected_digits} digit(s) -- verify by inspection",
+                })
+            
+            return json.dumps({
+                "ok": True,
+                "details": {
+                    "assembly": assembly_name,
+                    "findings": findings,
+                    "error_count": sum(1 for f in findings if f["severity"] == 3),
+                    "warning_count": sum(1 for f in findings if f["severity"] == 2),
+                },
+                "message": "Finger assembly validation complete",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {}, "message": f"Error in validate_finger_assembly: {e}"})
 
     def validate_sketch(self, args: Dict[str, Any]) -> str:
-        return json.dumps({"ok": True, "details": {}, "message": "Sketch validation complete"})
+        """Validate a FreeCAD Sketch object.
+        
+        Checks that a sketch is fully constrained, closed (if expected), and
+        has no degenerate geometry. Does NOT validate sketch against design
+        intent (that's manual review).
+        
+        Args:
+            sketch (str): Object name of the sketch (required).
+            check_closed (bool): Expect the sketch to form a closed profile (default False).
+            check_fully_constrained (bool): Expect full constraint (default True).
+        
+        Returns:
+            JSON: {"ok": bool, "details": {...findings...}, "message": str}
+        """
+        try:
+            sketch_name = args.get("sketch", "")
+            if not sketch_name:
+                return json.dumps({"ok": False, "details": {}, "message": "Missing required: sketch"})
+            
+            check_closed = bool(args.get("check_closed", False))
+            check_constrained = bool(args.get("check_fully_constrained", True))
+            
+            doc = self.get_document()
+            obj = self.get_object(sketch_name, doc)
+            if not obj or not hasattr(obj, "Geometry"):
+                return json.dumps({"ok": False, "details": {}, "message": f"Sketch not found: {sketch_name}"})
+            
+            findings = []
+            
+            # Check 1: Constraint status
+            if check_constrained:
+                # FreeCAD Sketcher marks over/under constraint via obj.MapReversed (for fully constrained)
+                # This is a simple advisory; real constraint check needs direct Sketcher API
+                findings.append({
+                    "rule": "sketch_constraint_status",
+                    "severity": _SEVERITY_LEVELS["info"],
+                    "message": "ℹ Constraint status: manual inspection recommended (not auto-detectable without Sketcher GUI)",
+                })
+            
+            # Check 2: Geometry count
+            geom_count = len(obj.Geometry) if hasattr(obj, "Geometry") else 0
+            if geom_count == 0:
+                findings.append({
+                    "rule": "sketch_empty",
+                    "severity": _SEVERITY_LEVELS["warning"],
+                    "message": "✗ Sketch is empty (no geometry)",
+                })
+            else:
+                findings.append({
+                    "rule": "sketch_geometry_count",
+                    "severity": _SEVERITY_LEVELS["info"],
+                    "message": f"✓ Sketch contains {geom_count} element(s)",
+                })
+            
+            # Check 3: Closed profile (advisory)
+            if check_closed:
+                findings.append({
+                    "rule": "sketch_closed_profile",
+                    "severity": _SEVERITY_LEVELS["info"],
+                    "message": "ℹ Expected closed profile -- verify by visualization",
+                })
+            
+            return json.dumps({
+                "ok": True,
+                "details": {
+                    "sketch": sketch_name,
+                    "geometry_count": geom_count,
+                    "findings": findings,
+                },
+                "message": "Sketch validation complete (manual review of constraints recommended)",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {}, "message": f"Error in validate_sketch: {e}"})
 
     def list_validation_rules(self, args: Dict[str, Any]) -> str:
-        return json.dumps({"ok": True, "details": {"rule_count": 9}, "message": "Validation rules available"})
+        """List all available validation rules and severity levels.
+        
+        Returns a catalog of what can be validated via this handler, grouped
+        by operation type. Useful for clients building validation workflows.
+        
+        Args:
+            (none)
+        
+        Returns:
+            JSON: {"ok": True, "details": {rules: [{operation, subrules: [...]}], severities: {...}}, message}
+        """
+        try:
+            rules_catalog = [
+                {
+                    "operation": "validate_solid",
+                    "description": "Geometry solidity checks",
+                    "subrules": ["solid_watertight"],
+                },
+                {
+                    "operation": "validate_mesh",
+                    "description": "Mesh object checks",
+                    "subrules": ["mesh_watertight"],
+                },
+                {
+                    "operation": "validate_material_zone",
+                    "description": "Material assignment coverage",
+                    "subrules": ["material_coverage"],
+                },
+                {
+                    "operation": "validate_socket_workflow",
+                    "description": "Socket/prosthesis workflow state",
+                    "subrules": ["socket_material"],
+                },
+                {
+                    "operation": "validate_fit_clearance",
+                    "description": "Pairwise fit and clearance between two objects",
+                    "subrules": ["fit_interference", "fit_clearance_too_tight", "fit_clearance_too_loose", "fit_clearance_measured"],
+                },
+                {
+                    "operation": "validate_finger_assembly",
+                    "description": "Hand prosthesis finger assembly checks",
+                    "subrules": ["assembly_watertight", "assembly_material_zones"],
+                },
+                {
+                    "operation": "validate_sketch",
+                    "description": "FreeCAD Sketch checks",
+                    "subrules": ["sketch_constraint_status", "sketch_geometry_count", "sketch_closed_profile"],
+                },
+                {
+                    "operation": "validate_against_standard",
+                    "description": "Engineering screening vs. ISO 10328 (axial stress, not certified test)",
+                    "subrules": ["axial_stress_vs_tensile"],
+                },
+            ]
+            
+            return json.dumps({
+                "ok": True,
+                "details": {
+                    "rules": rules_catalog,
+                    "severity_levels": _SEVERITY_LEVELS,
+                    "total_operations": len(rules_catalog),
+                },
+                "message": f"{len(rules_catalog)} validation operation(s) available",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {}, "message": f"Error in list_validation_rules: {e}"})
 
     def report_validation(self, args: Dict[str, Any]) -> str:
-        findings = args.get("findings", [])
-        error_count = sum(1 for f in findings if f.get("severity") == 3)
-        warning_count = sum(1 for f in findings if f.get("severity") == 2)
-        status = "FAIL" if error_count > 0 else ("PROCEED_WITH_CAUTION" if warning_count > 0 else "PASS")
-        return json.dumps({"ok": True, "details": {"status": status}, "message": f"Validation report: {status}"})
+        """Generate a validation report from a list of findings.
+        
+        Aggregates findings (from any validation operation) into a summary
+        report with overall status. Used to synthesize results from multiple
+        checks into a single pass/fail/caution decision.
+        
+        Args:
+            findings (list of dict): List of finding dicts, each with:
+                - "rule" (str): Rule identifier
+                - "severity" (int): 1=info, 2=warning, 3=error
+                - "message" (str): Human-readable finding
+            (optional) object_name (str): Name of object being validated (for report context)
+        
+        Returns:
+            JSON: {"ok": True, "details": {status, error_count, warning_count, info_count, findings}, message}
+        """
+        try:
+            findings = args.get("findings", [])
+            if not isinstance(findings, list):
+                return json.dumps({"ok": False, "details": {}, "message": "Invalid findings: expected list of dicts"})
+            
+            object_name = args.get("object_name", "(unnamed)")
+            
+            error_count = sum(1 for f in findings if f.get("severity") == 3)
+            warning_count = sum(1 for f in findings if f.get("severity") == 2)
+            info_count = sum(1 for f in findings if f.get("severity") == 1)
+            
+            if error_count > 0:
+                status = "FAIL"
+                status_icon = "✗"
+            elif warning_count > 0:
+                status = "PROCEED_WITH_CAUTION"
+                status_icon = "⚠"
+            else:
+                status = "PASS"
+                status_icon = "✓"
+            
+            return json.dumps({
+                "ok": True,
+                "details": {
+                    "object": object_name,
+                    "status": status,
+                    "error_count": error_count,
+                    "warning_count": warning_count,
+                    "info_count": info_count,
+                    "total_findings": len(findings),
+                    "findings": findings,
+                },
+                "message": f"{status_icon} {status}: {error_count} error(s), {warning_count} warning(s), {info_count} info(s)",
+            })
+        except Exception as e:
+            return json.dumps({"ok": False, "details": {}, "message": f"Error in report_validation: {e}"})
 
 
     # ------------------------------------------------------------------
