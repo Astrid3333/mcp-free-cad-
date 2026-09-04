@@ -363,6 +363,7 @@ class FreeCADSocketServer:
         self.fastener_mechanical_ops = FastenerMechanicalOpsHandler(self, _log_operation, _capture_state)
         self.validation_ops = ValidationOpsHandler(self, _log_operation, _capture_state)
         self.diagnostic_ops = DiagnosticOpsHandler(self, _log_operation, _capture_state)
+        self.project_mgmt_ops = ProjectManagementOpsHandler(self, _log_operation, _capture_state)
         # GUI-sensitive handlers get the task queues for thread safety
         self.view_ops = ViewOpsHandler(
             self, self._gui_task_queue, self._gui_response_queue, _log_operation, _capture_state
@@ -1090,6 +1091,7 @@ class FreeCADSocketServer:
             "fastener_mechanical_operations": self.fastener_mechanical_ops,
             "validation_operations": self.validation_ops,
             "diagnostic_operations": self.diagnostic_ops,
+            "project_management": self.project_mgmt_ops,
         }
 
         # run_inspector is a direct-dispatch tool (no 'operation' sub-field)
