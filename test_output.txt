@@ -1,0 +1,31 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/astrid/mcp-free-cad-
+plugins: dash-4.0.0, anyio-4.14.1
+collecting ... collected 9 items
+
+tests/test_inspector_rules.py::test_alignment_check_import PASSED        [ 11%]
+tests/test_inspector_rules.py::test_interface_smoothness_import PASSED   [ 22%]
+tests/test_inspector_rules.py::test_undercut_detection_import PASSED     [ 33%]
+tests/test_inspector_rules.py::test_thin_wall_warning_import PASSED      [ 44%]
+tests/test_inspector_rules.py::test_support_density_import PASSED        [ 55%]
+tests/test_inspector_rules.py::test_all_rules_in_default_rules FAILED    [ 66%]
+tests/test_inspector_rules.py::test_thin_wall_warning_detects_thin PASSED [ 77%]
+tests/test_inspector_rules.py::test_support_density_generates_estimate PASSED [ 88%]
+tests/test_inspector_rules.py::test_no_syntax_errors PASSED              [100%]
+
+=================================== FAILURES ===================================
+_______________________ test_all_rules_in_default_rules ________________________
+tests/test_inspector_rules.py:171: in test_all_rules_in_default_rules
+    rules = _default_rules([socket, residuum], None, None)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _default_rules() takes 1 positional argument but 3 were given
+
+During handling of the above exception, another exception occurred:
+tests/test_inspector_rules.py:178: in test_all_rules_in_default_rules
+    pytest.fail(f"Error: {e}")
+E   Failed: Error: _default_rules() takes 1 positional argument but 3 were given
+=========================== short test summary info ============================
+FAILED tests/test_inspector_rules.py::test_all_rules_in_default_rules - Faile...
+========================= 1 failed, 8 passed in 0.26s ==========================
