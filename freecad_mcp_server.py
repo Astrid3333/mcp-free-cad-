@@ -2842,6 +2842,47 @@ async def main():
                 ),
 
                 types.Tool(
+                    name="print_segmentation_operations",
+                    description=(
+                        "Partir una pieza grande en secciones que entren en la cama de "
+                        "impresion, con pines de alineacion macho/hembra en cada corte "
+                        "para que las piezas impresas se autoalineen al pegar. "
+                        "plan_segments: calcula cuantos cortes hacen falta a lo largo de "
+                        "un eje (o el eje mas largo si axis='auto') dado el tamano de "
+                        "cama, y devuelve las posiciones de los planos de corte. "
+                        "segment_with_joints: corta la shape en esos planos y agrega "
+                        "pines de alineacion (boss+hole con clearance) en cada interfaz."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "operation": {"type": "string", "enum": [
+                                "plan_segments", "segment_with_joints"]},
+                            "object_name": {"type": "string",
+                                             "description": "Nombre del objeto/pieza a segmentar"},
+                            "bed_size_mm": {"type": "array", "items": {"type": "number"},
+                                            "description": "plan_segments only: [x, y, z] tamano util de la cama de impresion, mm"},
+                            "axis": {"type": "string", "enum": ["x", "y", "z", "auto"], "default": "auto",
+                                     "description": "Eje a lo largo del cual segmentar"},
+                            "margin_mm": {"type": "number", "default": 5.0,
+                                          "description": "plan_segments only: margen a restar del bed_size_mm por eje"},
+                            "cut_planes_mm": {"type": "array", "items": {"type": "number"},
+                                               "description": "segment_with_joints only: posiciones de corte (normalmente el output de plan_segments)"},
+                            "pin_diameter_mm": {"type": "number", "default": 4.0,
+                                                 "description": "segment_with_joints only: diametro del pin de alineacion"},
+                            "pin_length_mm": {"type": "number", "default": 6.0,
+                                               "description": "segment_with_joints only: largo del pin de alineacion"},
+                            "pin_clearance_mm": {"type": "number", "default": 0.15,
+                                                  "description": "segment_with_joints only: holgura radial del agujero hembra respecto al pin"},
+                            "name": {"type": "string",
+                                     "description": "Nombre base para los segmentos resultantes (opcional, se autogenera si se omite)"},
+                        },
+                        "required": ["operation", "object_name"],
+                    },
+                    annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+                ),
+
+                types.Tool(
                     name="fastener_mechanical_operations",
                     description=(
                         "Parametric prosthetic fasteners: shoulder pins, ISO M3-M8 threads, bushings."
@@ -3120,7 +3161,7 @@ async def main():
                       "execute_python_async", "poll_job", "list_jobs",
                       "cancel_operation", "cancel_job",
                       "organic_operations", "surface_operations", "fillet_chamfer",
-                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations", "socket_pattern_operations", "fastener_mechanical_operations", "validation_operations"]:
+                      "compliant_operations", "tendon_routing_operations", "contact_pressure_operations", "growth_socket_operations", "quick_connect_operations", "fitting_history_operations", "lightweight_operations", "four_bar_knee_operations", "quadruped_limb_operations", "mesh_repair_operations", "materials_operations", "harness_attachment_operations", "socket_pattern_operations", "fastener_mechanical_operations", "print_segmentation_operations", "validation_operations"]:
             args = arguments or {}
 
             # Check if this is a continuation from interactive selection
